@@ -68,6 +68,12 @@ export const ExamListOrJoinView: React.FC<ExamListOrJoinViewProps> = ({
                     <Award className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>Số câu: <strong>{exam.questions.length} câu ({exam.totalPoints}đ)</strong></span>
                   </div>
+                  <div className="col-span-2 flex items-center justify-between text-[11px] bg-indigo-50/60 px-3 py-1.5 rounded-lg border border-indigo-100/80 text-indigo-900 font-semibold">
+                    <span>Quy định lượt thi:</span>
+                    <span className="font-bold text-indigo-700">
+                      {(exam.settings.maxAttempts ?? 1) > 0 ? `Tối đa ${exam.settings.maxAttempts ?? 1} lượt / mỗi thí sinh` : 'Không giới hạn lượt thi'}
+                    </span>
+                  </div>
                 </div>
               </div>
 

@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Exam, CandidateInfo, getExamCandidateFields } from '../../types/exam';
-import { Clock, Award, User, Hash, School, Phone, FileText, ArrowRight, X, AlertTriangle, Lock } from 'lucide-react';
+import { Exam, CandidateInfo, CandidateAttempt, getExamCandidateFields } from '../../types/exam';
+import { Clock, Award, User, Hash, School, Phone, FileText, ArrowRight, X, AlertTriangle, Lock, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 interface CandidateEntryModalProps {
   exam: Exam;
   isOpen: boolean;
+  attempts?: CandidateAttempt[];
   onClose: () => void;
   onStartExam: (candidateInfo: CandidateInfo) => void;
 }
@@ -12,6 +13,7 @@ interface CandidateEntryModalProps {
 export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
   exam,
   isOpen,
+  attempts = [],
   onClose,
   onStartExam
 }) => {
@@ -22,6 +24,25 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
   const enabledFields = useMemo(() => {
     return getExamCandidateFields(exam).filter((f) => f.enabled);
   }, [exam]);
+
+  const candidateCodeInput = (fieldValues['candidateCode'] || '').trim().toLowerCase();
+  const fullNameInput = (fieldValues['fullName'] || '').trim().toLowerCase();
+
+  const candidatePreviousAttempts = useMemo(() => {
+    if (!attempts || attempts.length === 0) return [];
+    if (!candidateCodeInput && !fullNameInput) return [];
+    return attempts.filter((att) => {
+      if (att.examId !== exam.id) return false;
+      const attCode = (att.candidateInfo.candidateCode || '').trim().toLowerCase();
+      const attName = (att.candidateInfo.fullName || '').trim().toLowerCase();
+      if (candidateCodeInput && attCode && candidateCodeInput === attCode) return true;
+      if (!candidateCodeInput && fullNameInput && attName && fullNameInput === attName) return true;
+      return false;
+    });
+  }, [attempts, exam.id, candidateCodeInput, fullNameInput]);
+
+  const maxAttempts = exam.settings.maxAttempts ?? 1;
+  const isAttemptLimitReached = maxAttempts > 0 && candidatePreviousAttempts.length >= maxAttempts;
 
   if (!isOpen) return null;
 
@@ -42,6 +63,13 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
         setErrorMsg(`Vui lòng nhập ${field.label}!`);
         return;
       }
+    }
+
+    if (isAttemptLimitReached) {
+      setErrorMsg(
+        `Thí sinh ${candidateCodeInput ? `MSSV/SBD "${candidateCodeInput.toUpperCase()}"` : `"${fullNameInput}"`} đã hoàn thành tối đa số lượt thi cho phép (${maxAttempts} lượt) cho đề thi này!`
+      );
+      return;
     }
 
     if (exam.password && exam.password.trim() !== '') {
@@ -160,6 +188,10 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
             <span className="flex items-center gap-1.5">
               Thang điểm: <strong>{exam.totalPoints}đ</strong>
             </span>
+            <span className="flex items-center gap-1.5 bg-white/15 px-2 py-0.5 rounded-md font-semibold">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-300" />
+              Lượt thi: <strong>{maxAttempts > 0 ? `Tối đa ${maxAttempts} lượt` : 'Không giới hạn'}</strong>
+            </span>
           </div>
         </div>
 
@@ -175,7 +207,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-bold text-slate-800">Thông tin thí sinh dự thi</h3>
-            {exam.settings.allowDemoFill && (
+            {exam.settings.allowDemoFill && !isAttemptLimitReached && (
               <button
                 type="button"
                 onClick={handleFillDemo}
@@ -185,6 +217,38 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
               </button>
             )}
           </div>
+
+          {/* Attempt Limit Reached Warning Card */}
+          {isAttemptLimitReached && (
+            <div className="p-4 bg-red-50 border-2 border-red-300 rounded-2xl text-red-900 text-xs space-y-1.5 animate-in fade-in">
+              <div className="flex items-center gap-2 font-bold text-red-700 text-sm">
+                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+                <span>ĐÃ HẾT LƯỢT THI CHO PHÉP ({candidatePreviousAttempts.length}/{maxAttempts} LƯỢT)</span>
+              </div>
+              <p className="leading-relaxed text-red-800">
+                Thí sinh <strong>{candidateCodeInput.toUpperCase() || fullNameInput}</strong> đã hoàn thành bài thi cho đề thi này ({candidatePreviousAttempts.length} lần nộp bài).
+              </p>
+              <div className="bg-white/80 p-2.5 rounded-xl border border-red-200 flex items-center justify-between text-xs font-semibold">
+                <span>Điểm số cao nhất đã đạt:</span>
+                <span className="text-blue-700 font-bold text-sm">
+                  {Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ
+                </span>
+              </div>
+              <p className="text-[11px] text-red-700 italic pt-0.5">
+                Nếu bạn gặp sự cố kỹ thuật hoặc cần cấp quyền thi lại, vui lòng liên hệ Ban Tổ Chức ELABS.
+              </p>
+            </div>
+          )}
+
+          {/* Normal Previous Attempt Warning if attempts left */}
+          {!isAttemptLimitReached && candidatePreviousAttempts.length > 0 && maxAttempts > 1 && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>
+                Bạn đã thi <strong>{candidatePreviousAttempts.length}/{maxAttempts} lượt</strong>. Điểm số cao nhất hiện tại: <strong>{Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ</strong>.
+              </span>
+            </div>
+          )}
 
           {errorMsg && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
@@ -267,10 +331,15 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-md shadow-blue-500/25 flex items-center gap-2 transition-all cursor-pointer"
+              disabled={isAttemptLimitReached}
+              className={`px-6 py-2.5 text-xs sm:text-sm font-bold rounded-xl flex items-center gap-2 transition-all ${
+                isAttemptLimitReached
+                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  : 'text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] shadow-md shadow-blue-500/25 cursor-pointer'
+              }`}
             >
-              <span>Vào thi (Bật Toàn màn hình)</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>{isAttemptLimitReached ? `Đã hết lượt thi (${candidatePreviousAttempts.length}/${maxAttempts})` : 'Vào thi (Bật Toàn màn hình)'}</span>
+              {!isAttemptLimitReached && <ArrowRight className="w-4 h-4" />}
             </button>
           </div>
         </form>

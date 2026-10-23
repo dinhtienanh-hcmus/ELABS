@@ -159,6 +159,7 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
   const [autoSubmitOnMaxViolations, setAutoSubmitOnMaxViolations] = useState(initialExam?.settings.autoSubmitOnMaxViolations ?? true);
   const [showResultImmediately, setShowResultImmediately] = useState(initialExam?.settings.showResultImmediately ?? true);
   const [showExplanations, setShowExplanations] = useState(initialExam?.settings.showExplanations ?? true);
+  const [maxAttempts, setMaxAttempts] = useState<number>(initialExam?.settings.maxAttempts ?? 1);
 
   // Candidate Entry Form Customization State
   const [candidateFields, setCandidateFields] = useState<CandidateFieldConfig[]>(() =>
@@ -610,7 +611,8 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
         allowReviewAnswers: true,
         candidateFields,
         allowDemoFill,
-        entryRuleNote: entryRuleNote.trim()
+        entryRuleNote: entryRuleNote.trim(),
+        maxAttempts: Number(maxAttempts) >= 0 ? Number(maxAttempts) : 1
       },
       questions: finalQuestions,
       status: initialExam?.status || 'published',
@@ -2031,6 +2033,29 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
           </div>
 
           <div className="pt-4 border-t border-slate-100 space-y-3">
+            <div className="p-3.5 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50/70 to-blue-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  <span>Giới hạn số lượt thi / mỗi thí sinh (MSSV/SBD)</span>
+                </div>
+                <div className="text-[11px] text-slate-600 mt-0.5">
+                  Kiểm soát mỗi thí sinh được nộp bài tối đa bao nhiêu lần để đảm bảo tính công bằng
+                </div>
+              </div>
+              <select
+                value={maxAttempts}
+                onChange={(e) => setMaxAttempts(Number(e.target.value))}
+                className="px-3 py-1.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 shadow-xs cursor-pointer"
+              >
+                <option value={1}>1 lượt (Thi chính thức - Chỉ thi 1 lần duy nhất)</option>
+                <option value={2}>2 lượt (Cho phép làm lại 1 lần nếu gặp sự cố)</option>
+                <option value={3}>3 lượt</option>
+                <option value={5}>5 lượt</option>
+                <option value={0}>Không giới hạn (Luyện tập tự do)</option>
+              </select>
+            </div>
+
             <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Tùy chọn chống gian lận &amp; Hiển thị
             </h4>

@@ -16,7 +16,8 @@ const EX_TEST_MACROS: Record<string, string> = {
   '\\wideparen': '\\widehat{#1}',
   '\\degree': '^\\circ',
   '\\celsius': '^\\circ\\text{C}',
-  '\\vn': '\\varnothing'
+  '\\vn': '\\varnothing',
+  '\\bar': '\\overline{#1}'
 };
 
 function renderKatexSafe(math: string, displayMode: boolean): string {
@@ -74,6 +75,7 @@ function formatLatexTextSegment(rawText: string): string {
       .replace(/\\textbf\s*\{([^{}]*)\}/g, '<strong class="font-bold text-slate-900">$1</strong>')
       .replace(/\\(?:textit|emph)\s*\{([^{}]*)\}/g, '<em class="italic">$1</em>')
       .replace(/\\underline\s*\{([^{}]*)\}/g, '<u class="underline underline-offset-2">$1</u>')
+      .replace(/\\(?:overline|bar)\s*\{([^{}]*)\}/g, '<span class="inline-block border-t-2 border-slate-900 pt-0.5 leading-none">$1</span>')
       .replace(
         /\\texttt\s*\{([^{}]*)\}/g,
         '<code class="px-1 py-0.5 bg-slate-100 rounded font-mono text-[0.92em]">$1</code>'

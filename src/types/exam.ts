@@ -163,6 +163,7 @@ export interface ExamSettings {
   candidateFields?: CandidateFieldConfig[]; // Cấu hình các trường thông tin thí sinh điền khi vào thi
   allowDemoFill?: boolean; // Cho phép hiển thị nút Điền nhanh mẫu sinh viên
   entryRuleNote?: string; // Nội dung quy chế hiển thị ở hộp thoại vào thi
+  maxAttempts?: number; // Giới hạn số lượt thi mỗi thí sinh (1 = chỉ thi 1 lần duy nhất, 2 = tối đa 2 lần, 0 = không giới hạn)
 }
 
 export interface Exam {

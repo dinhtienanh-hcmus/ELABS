@@ -354,6 +354,7 @@ export default function App() {
         <CandidateEntryModal
           exam={selectedExamForEntry}
           isOpen={true}
+          attempts={attempts}
           onClose={() => setSelectedExamForEntry(null)}
           onStartExam={handleStartExam}
         />
