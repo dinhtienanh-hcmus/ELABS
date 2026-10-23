@@ -247,8 +247,8 @@ export function sanitizeQuestion(q: Question): Question {
 
   let tikzCode = q.tikzCode || tikzBlocks[0];
   let imageUrl = q.imageUrl;
-  if (!imageUrl && tikzCode) {
-    imageUrl = renderTikzToSvgDataUrl(tikzCode);
+  if (tikzCode && (!imageUrl || imageUrl.startsWith('data:image/svg+xml;utf8,'))) {
+    imageUrl = renderTikzToSvgDataUrl(tikzCode) || imageUrl;
   }
 
   return {

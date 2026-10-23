@@ -92,7 +92,7 @@ function escapeXml(str: string): string {
 }
 
 /**
- * Formats LaTeX label text (e.g. "$R_1 = 10\Omega$", "\textbf{A}") into SVG <tspan> markup
+ * Formats LaTeX label text (e.g. "$R_1 = 10\Omega$", "\textbf{A}", "$\overline{CS}$") into SVG <tspan> markup
  */
 function formatLatexToSvgText(raw: string): string {
   let s = raw.trim();
@@ -100,6 +100,19 @@ function formatLatexToSvgText(raw: string): string {
 
   // Remove outer $...$
   s = s.replace(/\$/g, '');
+
+  // Unescape common LaTeX escapes
+  s = s
+    .replace(/\\\{/g, '{')
+    .replace(/\\\}/g, '}')
+    .replace(/\\%/g, '%')
+    .replace(/\\&/g, '&')
+    .replace(/\\_/g, '_')
+    .replace(/\\#/g, '#');
+
+  // Mark \overline{...} and \bar{...} with a temporary token so we can render overline tspan
+  s = s.replace(/\\(?:overline|bar)\s*\{([^{}]*)\}/g, '⟪OVERLINE:$1⟫');
+  s = s.replace(/\\(?:vec|overrightarrow)\s*\{([^{}]*)\}/g, '$1');
 
   // Strip \textbf, \textit, \mathrm, \text, \mathbf, \mathit
   let prev = '';
@@ -130,6 +143,7 @@ function formatLatexToSvgText(raw: string): string {
     '\\Phi': 'Φ',
     '\\psi': 'ψ',
     '\\infty': '∞',
+    '\\sim': '~',
     '\\pm': '±',
     '\\mp': '∓',
     '\\times': '×',
@@ -153,7 +167,9 @@ function formatLatexToSvgText(raw: string): string {
     '\\celsius': '°C',
     '\\parallel': '∥',
     '\\perp': '⊥',
-    '\\angle': '∠'
+    '\\angle': '∠',
+    '\\quad': '  ',
+    '\\qquad': '    '
   };
 
   for (const [k, v] of Object.entries(symbolMap)) {
@@ -164,15 +180,26 @@ function formatLatexToSvgText(raw: string): string {
   s = s.replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1/$2)');
   // Handle \sqrt{x} -> √(x)
   s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)');
-  // Handle \overline{x} or \bar{x}
-  s = s.replace(/\\(?:overline|bar|vec|overrightarrow)\s*\{([^{}]*)\}/g, '$1');
   // Comma inside braces {,} -> ,
   s = s.replace(/\{,\}/g, ',');
 
-  // Parse subscripts and superscripts into <tspan>
+  // Parse subscripts, superscripts, and overlines into <tspan>
   let result = '';
   let i = 0;
+  let inOverline = false;
   while (i < s.length) {
+    if (s.startsWith('⟪OVERLINE:', i)) {
+      inOverline = true;
+      result += '<tspan text-decoration="overline">';
+      i += 10;
+      continue;
+    }
+    if (s[i] === '⟫' && inOverline) {
+      inOverline = false;
+      result += '</tspan>';
+      i++;
+      continue;
+    }
     if ((s[i] === '_' || s[i] === '^') && i + 1 < s.length) {
       const isSub = s[i] === '_';
       i++;
@@ -192,7 +219,7 @@ function formatLatexToSvgText(raw: string): string {
       }
       const dy = isSub ? '4' : '-5';
       const resetDy = isSub ? '-4' : '5';
-      result += `<tspan font-size="75%" dy="${dy}">${escapeXml(subContent)}</tspan><tspan dy="${resetDy}">&#8203;</tspan>`;
+      result += `<tspan font-size="78%" dy="${dy}">${escapeXml(subContent)}</tspan><tspan dy="${resetDy}">&#8203;</tspan>`;
     } else if (s[i] === '{' || s[i] === '}') {
       i++;
     } else {
@@ -200,20 +227,98 @@ function formatLatexToSvgText(raw: string): string {
       i++;
     }
   }
+  if (inOverline) result += '</tspan>';
 
   return result;
 }
 
 /**
- * Expand simple \foreach loops in TikZ code
+ * Formats a single line of C / Verilog / assembly code inside a TikZ \node[align=left] block into SVG tspans
+ */
+function formatCodeLineToSvgTspans(rawLine: string): { svgTspans: string; plainLength: number } {
+  let s = rawLine;
+
+  // Replace \qquad and \quad with indentation spaces
+  s = s.replace(/\\qquad\s*/g, '        ').replace(/\\quad\s*/g, '    ');
+
+  // Replace math-wrapped operators like $\sim$, $<<$, $|$, $<=$
+  s = s
+    .replace(/\$\\sim\$/g, '~')
+    .replace(/\$(<<|>>|\||<=|>=|==|!=|\+|-|\*|\/)\$/g, '$1')
+    .replace(/\$/g, '');
+
+  // Replace escaped LaTeX characters used in C/Verilog code
+  s = s
+    .replace(/\\\{/g, '{')
+    .replace(/\\\}/g, '}')
+    .replace(/\\%/g, '%')
+    .replace(/\\&/g, '&')
+    .replace(/\\_/g, '_')
+    .replace(/\\#/g, '#')
+    .replace(/\\sim\b\s*/g, '~');
+
+  // Tokenize \textbf{...} so keywords are highlighted in bold blue/slate
+  let svgTspans = '';
+  let plainLength = 0;
+  let cursor = 0;
+
+  while (cursor < s.length) {
+    const bfMatch = s.slice(cursor).match(/^\\textbf\s*\{([^{}]*)\}/);
+    if (bfMatch) {
+      const kw = bfMatch[1];
+      svgTspans += `<tspan font-weight="700" fill="#1d4ed8">${escapeXml(kw)}</tspan>`;
+      plainLength += kw.length;
+      cursor += bfMatch[0].length;
+      continue;
+    }
+    const ch = s[cursor];
+    if (ch === ' ') {
+      svgTspans += '&#160;';
+      plainLength += 1;
+    } else {
+      svgTspans += escapeXml(ch);
+      plainLength += 1;
+    }
+    cursor++;
+  }
+
+  return { svgTspans, plainLength };
+}
+
+/**
+ * Strips \tikzset{...} blocks (which often lack a trailing semicolon)
+ */
+function stripTikzset(tikz: string): string {
+  let result = tikz;
+  let safety = 0;
+  while (safety < 20) {
+    safety++;
+    const match = result.match(/\\tikzset(?![a-zA-Z])/);
+    if (!match || match.index === undefined) break;
+    const startIdx = match.index;
+    const grp = extractBraceContent(result, startIdx + match[0].length);
+    if (!grp) {
+      result = result.slice(0, startIdx) + result.slice(startIdx + match[0].length);
+      break;
+    }
+    let endIdx = grp.endIndex;
+    while (endIdx < result.length && /\s/.test(result[endIdx])) endIdx++;
+    if (result[endIdx] === ';') endIdx++;
+    result = result.slice(0, startIdx) + '\n' + result.slice(endIdx);
+  }
+  return result;
+}
+
+/**
+ * Expand \foreach loops in TikZ code (supports 1 to N slash-separated variables)
  */
 function expandForeach(tikz: string): string {
-  const foreachRegex = /\\foreach\s+(\\[a-zA-Z]+(?:\s*\/\s*\\[a-zA-Z]+)?)\s+in\s+\{([^{}]+)\}\s*\{/g;
+  const foreachRegex = /\\foreach\s+(\\[a-zA-Z]+(?:\s*\/\s*\\[a-zA-Z]+)*)\s+in\s+\{([^{}]+)\}\s*\{/g;
   let result = tikz;
   let match: RegExpExecArray | null;
   let safety = 0;
 
-  while ((match = foreachRegex.exec(result)) !== null && safety < 20) {
+  while ((match = foreachRegex.exec(result)) !== null && safety < 30) {
     safety++;
     const vars = match[1].split('/').map((v) => v.trim());
     const listRaw = match[2].trim();
@@ -222,7 +327,7 @@ function expandForeach(tikz: string): string {
     if (!bodyGroup) break;
 
     // Expand list (handle a,...,b or comma-separated)
-    let items = listRaw.split(',').map((x) => x.trim());
+    let items = listRaw.split(',').map((x) => x.trim()).filter(Boolean);
     if (items.length === 3 && items[1] === '...') {
       const startNum = parseFloat(items[0]);
       const endNum = parseFloat(items[2]);
@@ -238,11 +343,17 @@ function expandForeach(tikz: string): string {
     let expanded = '';
     for (const item of items) {
       let instance = bodyGroup.content;
-      if (vars.length === 2 && item.includes('/')) {
-        const [val1, val2] = item.split('/').map((v) => v.trim());
-        instance = instance.split(vars[0]).join(val1).split(vars[1]).join(val2);
+      if (vars.length > 1 && item.includes('/')) {
+        const vals = item.split('/').map((v) => v.trim());
+        for (let k = 0; k < vars.length; k++) {
+          const escapedVar = vars[k].replace(/\\/g, '\\\\');
+          const varRegex = new RegExp(escapedVar + '(?![a-zA-Z])', 'g');
+          instance = instance.replace(varRegex, vals[k] ?? '');
+        }
       } else {
-        instance = instance.split(vars[0]).join(item);
+        const escapedVar = vars[0].replace(/\\/g, '\\\\');
+        const varRegex = new RegExp(escapedVar + '(?![a-zA-Z])', 'g');
+        instance = instance.replace(varRegex, item);
       }
       expanded += instance + '\n';
     }
@@ -255,13 +366,73 @@ function expandForeach(tikz: string): string {
 }
 
 /**
- * Evaluates simple math expressions in TikZ coordinates like "2*1.5" or "3+0.5"
+ * Converts \begin{scope}[...] ... \end{scope} into __SCOPE_PUSH__[...]; ... __SCOPE_POP__;
+ * so statement splitting and coordinate shifts work seamlessly.
  */
+function transformScopes(tikz: string): string {
+  let result = tikz;
+  let safety = 0;
+  while (safety < 40) {
+    safety++;
+    const match = result.match(/\\begin\{scope\}/);
+    if (!match || match.index === undefined) break;
+    const startIdx = match.index;
+    let afterBegin = startIdx + match[0].length;
+    let scopeOpts = '';
+    while (afterBegin < result.length && /\s/.test(result[afterBegin])) afterBegin++;
+    if (result[afterBegin] === '[') {
+      const br = extractBracketContent(result, afterBegin);
+      if (br) {
+        scopeOpts = br.content;
+        afterBegin = br.endIndex;
+      }
+    }
+    result =
+      result.slice(0, startIdx) +
+      `; __SCOPE_PUSH__[${scopeOpts}]; ` +
+      result.slice(afterBegin);
+  }
+  result = result.replace(/\\end\{scope\}/g, '; __SCOPE_POP__; ');
+  return result;
+}
+
+/**
+ * Evaluates simple math expressions in TikZ coordinates like "1.25+0.15", "1.25-0.2", "2*1.5"
+ */
+function evalSimpleMath(expr: string): number {
+  const cleaned = expr.replace(/\s+/g, '');
+  if (!cleaned) return 0;
+  // Tokenize numbers and + - * /
+  if (/^[+-]?\d+(?:\.\d+)?(?:[+-/*]\d+(?:\.\d+)?)*$/.test(cleaned)) {
+    try {
+      // Safe evaluation for simple arithmetic
+      const terms = cleaned.split(/(?=[+-])/);
+      let sum = 0;
+      for (const term of terms) {
+        if (!term) continue;
+        if (term.includes('*')) {
+          const parts = term.split('*');
+          sum += parts.reduce((acc, p) => acc * parseFloat(p), 1);
+        } else if (term.includes('/')) {
+          const parts = term.split('/');
+          sum += parts.slice(1).reduce((acc, p) => acc / (parseFloat(p) || 1), parseFloat(parts[0]));
+        } else {
+          sum += parseFloat(term);
+        }
+      }
+      return isNaN(sum) ? 0 : sum;
+    } catch {
+      return parseFloat(cleaned) || 0;
+    }
+  }
+  return parseFloat(cleaned) || 0;
+}
+
 function evalNum(expr: string, unitScale: number): number {
   let s = expr.trim();
   let factor = unitScale;
   if (s.endsWith('pt')) {
-    factor = 1.5;
+    factor = 1.45;
     s = s.slice(0, -2).trim();
   } else if (s.endsWith('cm')) {
     factor = unitScale;
@@ -270,8 +441,62 @@ function evalNum(expr: string, unitScale: number): number {
     factor = unitScale / 10;
     s = s.slice(0, -2).trim();
   }
-  const val = parseFloat(s);
+  const val = evalSimpleMath(s);
   return (isNaN(val) ? 0 : val) * factor;
+}
+
+/**
+ * Evaluates a TikZ plot function f(x) at numeric x (e.g. "0.35*(\x-1)^2" or "1.8*sin(\x r)")
+ */
+function evalPlotFunction(fnExpr: string, xVal: number): number {
+  try {
+    let js = fnExpr.trim();
+    // Replace \x with (xVal)
+    js = js.replace(/\\x(?![a-zA-Z])/g, `(${xVal})`);
+    // Handle sin(... r) and cos(... r) in radians vs degrees
+    js = js.replace(/sin\s*\(([^()]*?)\s+r\)/gi, 'Math.sin($1)');
+    js = js.replace(/cos\s*\(([^()]*?)\s+r\)/gi, 'Math.cos($1)');
+    js = js.replace(/sin\s*\(/gi, 'Math.sin((Math.PI/180)*');
+    js = js.replace(/cos\s*\(/gi, 'Math.cos((Math.PI/180)*');
+    js = js.replace(/exp\s*\(/gi, 'Math.exp(');
+    js = js.replace(/sqrt\s*\(/gi, 'Math.sqrt(');
+    js = js.replace(/abs\s*\(/gi, 'Math.abs(');
+    js = js.replace(/\^/g, '**');
+
+    // Guard against unsafe characters
+    if (/[^0-9xX+\-*/().\sMathsincoexpqrtabPI,]/.test(js)) {
+      return 0;
+    }
+    const fn = new Function(`return (${js});`);
+    const res = Number(fn());
+    return isFinite(res) ? res : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function resolveStrokeColor(opts: string): string {
+  const lower = opts.toLowerCase();
+  if (/\bblue\b/.test(lower)) return '#2563eb';
+  if (/\bred\b/.test(lower)) return '#dc2626';
+  if (/\bteal\b/.test(lower)) return '#0d9488';
+  if (/\bgreen\b/.test(lower)) return '#16a34a';
+  if (/\borange\b/.test(lower)) return '#ea580c';
+  if (/\bpurple\b|\bviolet\b/.test(lower)) return '#7c3aed';
+  if (/\bgray\b|\bgrey\b/.test(lower)) return '#64748b';
+  return '#1e293b';
+}
+
+function resolveFillColor(opts: string, cmdType: string): string {
+  const lower = opts.toLowerCase();
+  if (/fill\s*=\s*white/.test(lower)) return '#ffffff';
+  if (/fill\s*=\s*teal!(\d+)/.test(lower)) return 'rgba(13, 148, 136, 0.22)';
+  if (/fill\s*=\s*blue!(\d+)/.test(lower)) return 'rgba(37, 99, 235, 0.18)';
+  if (/fill\s*=\s*red!(\d+)/.test(lower)) return 'rgba(220, 38, 38, 0.18)';
+  if (/fill\s*=\s*gray!(\d+)/.test(lower)) return '#f1f5f9';
+  if (cmdType === 'fill') return resolveStrokeColor(opts) === '#1e293b' ? '#0f172a' : resolveStrokeColor(opts);
+  if (cmdType === 'filldraw' && /fill\s*=/.test(lower)) return '#f8fafc';
+  return 'none';
 }
 
 /**
@@ -285,6 +510,14 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
   const svgElements: string[] = [];
   const labelElements: string[] = [];
   const allPoints: Point[] = [];
+
+  const scopeStack: Point[] = [];
+  let currentShift: Point = { x: 0, y: 0 };
+
+  // Track whether axes with arrows cross the origin (0,0) so we can position the '0' origin label cleanly
+  let hasHorizontalAxisThroughOrigin = false;
+  let hasVerticalAxisThroughOrigin = false;
+  let hasExplicitOriginZeroLabel = false;
 
   const trackPoint = (x: number, y: number, pad: number = 0) => {
     allPoints.push({ x: x - pad, y: y - pad });
@@ -302,9 +535,11 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
 
   body = body.replace(/\\begin\{(?:tikzpicture|circuitikz)\}(?:\s*\[[\s\S]*?\])?/gi, '');
   body = body.replace(/\\end\{(?:tikzpicture|circuitikz)\}/gi, '');
+  body = stripTikzset(body);
   body = expandForeach(body);
+  body = transformScopes(body);
 
-  // Split into semicolon-terminated statements (respecting braces)
+  // Split into semicolon-terminated statements (respecting unescaped braces)
   const statements: string[] = [];
   let currentStmt = '';
   let braceDepth = 0;
@@ -335,14 +570,14 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
     // Polar coordinate (angle:radius)
     if (inner.includes(':') && !inner.includes(',')) {
       const [angStr, radStr] = inner.split(':');
-      const ang = (parseFloat(angStr) * Math.PI) / 180;
+      const ang = (evalSimpleMath(angStr) * Math.PI) / 180;
       const rad = evalNum(radStr, SCALE);
       const dx = Math.cos(ang) * rad;
       const dy = Math.sin(ang) * rad;
       if (isRelative && lastPoint) {
         return { x: lastPoint.x + dx, y: lastPoint.y + dy };
       }
-      return { x: dx, y: dy };
+      return { x: currentShift.x + dx, y: currentShift.y + dy };
     }
 
     // Cartesian (x, y)
@@ -353,7 +588,7 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
       if (isRelative && lastPoint) {
         return { x: lastPoint.x + x, y: lastPoint.y + y };
       }
-      return { x, y };
+      return { x: currentShift.x + x, y: currentShift.y + y };
     }
 
     return null;
@@ -364,6 +599,12 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
     const formatted = formatLatexToSvgText(text);
     if (!formatted) return;
 
+    const plainText = formatted.replace(/<[^>]+>/g, '').trim();
+    const isAtOrigin = Math.abs(p.x) < 1 && Math.abs(p.y) < 1;
+    if (isAtOrigin && (plainText === '0' || plainText === 'O')) {
+      hasExplicitOriginZeroLabel = true;
+    }
+
     const sp = toSvg(p);
     let dx = 0;
     let dy = 5;
@@ -372,8 +613,14 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
     const lowerOpts = opts.toLowerCase();
     const isAbove = lowerOpts.includes('above');
     const isBelow = lowerOpts.includes('below');
-    const isLeft = lowerOpts.includes('left');
+    let isLeft = lowerOpts.includes('left');
     const isRight = lowerOpts.includes('right');
+
+    // If '0' is placed at (0,0) with [below] on a coordinate graph where a vertical axis passes through x=0,
+    // shift it to 'below left' so the vertical axis doesn't cut right through the '0' digit.
+    if (isAtOrigin && plainText === '0' && isBelow && !isLeft && !isRight && hasVerticalAxisThroughOrigin) {
+      isLeft = true;
+    }
 
     if (isAbove && isLeft) {
       dx = -8;
@@ -407,18 +654,83 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
 
     const tx = sp.x + dx;
     const ty = sp.y + dy;
-    trackPoint(tx, -ty, 28);
+    trackPoint(tx, -ty, 26);
+
+    const textColor = resolveStrokeColor(opts) === '#1e293b' ? '#0f172a' : resolveStrokeColor(opts);
+    const fontSize = /\btiny\b/i.test(rawTextOrOpts(text, opts)) ? '10.5' : '13';
 
     const hasFillWhite = lowerOpts.includes('fill=white');
     if (hasFillWhite) {
-      const estW = Math.max(18, formatted.replace(/<[^>]+>/g, '').length * 8 + 8);
+      const estW = Math.max(18, plainText.length * 8 + 8);
       labelElements.push(
         `<rect x="${(tx - estW / 2).toFixed(1)}" y="${(ty - 13).toFixed(1)}" width="${estW}" height="18" rx="3" fill="#ffffff" />`
       );
     }
 
+    // Use a subtle white halo stroke so labels never become unreadable when close to wires/axes
     labelElements.push(
-      `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0f172a">${formatted}</text>`
+      `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" font-family="Inter, system-ui, sans-serif" font-size="${fontSize}" font-weight="600" fill="${textColor}" stroke="#ffffff" stroke-width="3" paint-order="stroke fill">${formatted}</text>`
+    );
+  };
+
+  function rawTextOrOpts(text: string, opts: string): string {
+    return `${text} ${opts}`;
+  }
+
+  // Helper to render a multi-line code box (C code, Verilog code, etc.) or boxed node
+  const renderCodeOrBoxNode = (pt: Point, rawContent: string, nodeOpts: string) => {
+    const sp = toSvg(pt);
+    const lines = rawContent
+      .split(/\\\\/)
+      .map((l) => l.replace(/^\s*\n+|\n+\s*$/g, ''))
+      .filter((l, idx, arr) => !(idx === arr.length - 1 && !l.trim()));
+
+    const isCodeBlock =
+      lines.length > 1 ||
+      /\balign\s*=\s*left\b/i.test(nodeOpts) ||
+      /\\textbf\{(int|void|char|return|if|else|for|while|module|always|begin|end|endmodule)\}/.test(rawContent) ||
+      /PORTA|printf|posedge/.test(rawContent);
+
+    if (isCodeBlock) {
+      const parsedLines = lines.map((line) => formatCodeLineToSvgTspans(line));
+      const maxChars = Math.max(12, ...parsedLines.map((l) => l.plainLength));
+      const lineHeight = 22;
+      const padX = 16;
+      const padY = 14;
+      const boxW = Math.max(180, maxChars * 8.4 + padX * 2);
+      const boxH = parsedLines.length * lineHeight + padY * 2;
+      const boxX = sp.x - boxW / 2;
+      const boxY = sp.y - boxH / 2;
+
+      trackPoint(pt.x - boxW / 2, pt.y - boxH / 2, 12);
+      trackPoint(pt.x + boxW / 2, pt.y + boxH / 2, 12);
+
+      svgElements.push(
+        `<rect x="${boxX.toFixed(1)}" y="${boxY.toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.8" />`,
+        `<rect x="${boxX.toFixed(1)}" y="${boxY.toFixed(1)}" width="4.5" height="${boxH.toFixed(1)}" rx="2" fill="#2563eb" />`
+      );
+
+      parsedLines.forEach((pl, idx) => {
+        const ly = boxY + padY + (idx + 0.78) * lineHeight;
+        const lx = boxX + padX + 4;
+        labelElements.push(
+          `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="start" font-family="'JetBrains Mono', 'Fira Code', Consolas, monospace" font-size="13.5" font-weight="500" fill="#0f172a">${pl.svgTspans}</text>`
+        );
+      });
+      return;
+    }
+
+    // Single-line boxed node
+    const formatted = formatLatexToSvgText(rawContent);
+    const plainLen = formatted.replace(/<[^>]+>/g, '').length;
+    const boxW = Math.max(36, plainLen * 8.5 + 20);
+    const boxH = 28;
+    trackPoint(pt.x, pt.y, Math.max(boxW, boxH) / 2 + 8);
+    svgElements.push(
+      `<rect x="${(sp.x - boxW / 2).toFixed(1)}" y="${(sp.y - boxH / 2).toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="5" fill="#f8fafc" stroke="#1e293b" stroke-width="1.8" />`
+    );
+    labelElements.push(
+      `<text x="${sp.x.toFixed(1)}" y="${(sp.y + 4.5).toFixed(1)}" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0f172a">${formatted}</text>`
     );
   };
 
@@ -436,14 +748,12 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
 
     const ux = dx / len;
     const uy = dy / len;
-    // Perpendicular unit vector (pointing "above" for horizontal left-to-right segment)
     const nx = uy;
     const ny = -ux;
     const midX = (s1.x + s2.x) / 2;
     const midY = (s1.y + s2.y) / 2;
     const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
 
-    // Extract label from l=..., l_=..., l^=..., or =...
     let label = '';
     const labelMatch =
       compSpec.match(/(?:l[_^]?|v[_^]?|i[_^]?)\s*=\s*(\{[^}]*\}|[^,\]]+)/) ||
@@ -452,7 +762,6 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
       label = labelMatch[1].trim().replace(/^\{|\}$/g, '');
     }
 
-    // Determine component type
     const head = compSpec.split(',')[0].split('=')[0].trim();
     const isResistor = /^(?:R|vR|european\s+resistor|american\s+resistor|generic)$/i.test(head);
     const isCapacitor = /^(?:C|cC|capacitor|ecapacitor)$/i.test(head);
@@ -563,13 +872,11 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
         </g>`
       );
     } else {
-      // Plain wire (short)
       svgElements.push(
         `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="#1e293b" stroke-width="2" />`
       );
     }
 
-    // Check terminal poles (*-*, *-o, o-*, etc.)
     const poleMatch = compSpec.match(/(?:^|,)\s*([*o])-([*o]?)|(?:^|,)\s*-([*o])/);
     if (poleMatch || compSpec.includes('*-*') || compSpec.includes('o-o')) {
       const startPole = compSpec.includes('*-') ? '*' : compSpec.includes('o-') ? 'o' : '';
@@ -586,7 +893,6 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
       }
     }
 
-    // Render component label offset perpendicular to segment
     if (label) {
       const formatted = formatLatexToSvgText(label);
       const offsetDist = 20;
@@ -594,13 +900,40 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
       const ly = midY + ny * offsetDist + 4;
       trackPoint(lx, -ly, 25);
       labelElements.push(
-        `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0f172a">${formatted}</text>`
+        `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0f172a" stroke="#ffffff" stroke-width="3" paint-order="stroke fill">${formatted}</text>`
       );
     }
   };
 
   // Process each statement
   for (const stmt of statements) {
+    // Scope push / pop markers
+    if (stmt.startsWith('__SCOPE_PUSH__[')) {
+      const opts = stmt.slice(15, -1);
+      scopeStack.push({ ...currentShift });
+      const shiftMatch = opts.match(/shift\s*=\s*\{\s*\(([^,]+),([^)]+)\)\s*\}/);
+      if (shiftMatch) {
+        currentShift = {
+          x: currentShift.x + evalNum(shiftMatch[1], SCALE),
+          y: currentShift.y + evalNum(shiftMatch[2], SCALE)
+        };
+      }
+      const xshiftMatch = opts.match(/xshift\s*=\s*([^,\]]+)/);
+      if (xshiftMatch) {
+        currentShift = { ...currentShift, x: currentShift.x + evalNum(xshiftMatch[1], SCALE) };
+      }
+      const yshiftMatch = opts.match(/yshift\s*=\s*([^,\]]+)/);
+      if (yshiftMatch) {
+        currentShift = { ...currentShift, y: currentShift.y + evalNum(yshiftMatch[1], SCALE) };
+      }
+      continue;
+    }
+    if (stmt === '__SCOPE_POP__') {
+      const prev = scopeStack.pop();
+      if (prev) currentShift = prev;
+      continue;
+    }
+
     // 1. \coordinate (name) at (x,y)
     const coordDefMatch = stmt.match(/^\\coordinate(?:\s*\[[^\]]*\])?\s*\(([^)]+)\)\s*at\s*\(([^)]+)\)/);
     if (coordDefMatch) {
@@ -613,7 +946,7 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
       continue;
     }
 
-    // 2. Standalone \node
+    // 2. Standalone \node (both with "at (x,y)" and without "at (x,y)")
     if (stmt.startsWith('\\node')) {
       let rest = stmt.slice(5).trim();
       let nodeOpts = '';
@@ -639,49 +972,58 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
           rest = rest.slice(br.endIndex).trim();
         }
       }
+
+      let pt: Point | null = { x: currentShift.x, y: currentShift.y };
       const atMatch = rest.match(/^at\s*\(([^)]+)\)/);
       if (atMatch) {
-        const pt = parseCoord(`(${atMatch[1]})`);
+        pt = parseCoord(`(${atMatch[1]})`);
         rest = rest.slice(atMatch[0].length).trim();
-        if (rest.startsWith('[')) {
-          const br = extractBracketContent(rest, 0);
-          if (br) {
-            nodeOpts += ',' + br.content;
-            rest = rest.slice(br.endIndex).trim();
-          }
+      }
+      if (rest.startsWith('[')) {
+        const br = extractBracketContent(rest, 0);
+        if (br) {
+          nodeOpts += ',' + br.content;
+          rest = rest.slice(br.endIndex).trim();
         }
-        const textGrp = extractBraceContent(rest, 0);
-        if (pt) {
-          if (nodeName) namedCoords.set(nodeName, pt);
-          trackPoint(pt.x, pt.y, 12);
+      }
 
-          // Check if ground symbol or circ/ocirc
-          if (/\bground\b/i.test(nodeOpts)) {
+      const textGrp = extractBraceContent(rest, 0);
+      if (pt) {
+        if (nodeName) namedCoords.set(nodeName, pt);
+        trackPoint(pt.x, pt.y, 12);
+
+        if (/\bground\b/i.test(nodeOpts)) {
+          const sp = toSvg(pt);
+          svgElements.push(
+            `<line x1="${sp.x}" y1="${sp.y}" x2="${sp.x}" y2="${sp.y + 8}" stroke="#1e293b" stroke-width="2" />`,
+            `<line x1="${sp.x - 10}" y1="${sp.y + 8}" x2="${sp.x + 10}" y2="${sp.y + 8}" stroke="#1e293b" stroke-width="2" />`,
+            `<line x1="${sp.x - 6}" y1="${sp.y + 12}" x2="${sp.x + 6}" y2="${sp.y + 12}" stroke="#1e293b" stroke-width="2" />`,
+            `<line x1="${sp.x - 2.5}" y1="${sp.y + 16}" x2="${sp.x + 2.5}" y2="${sp.y + 16}" stroke="#1e293b" stroke-width="2" />`
+          );
+        } else if (/\bcirc\b/i.test(nodeOpts)) {
+          const sp = toSvg(pt);
+          svgElements.push(`<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="3.5" fill="#0f172a" />`);
+        } else if (/\bocirc\b/i.test(nodeOpts)) {
+          const sp = toSvg(pt);
+          svgElements.push(
+            `<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="3.5" fill="#ffffff" stroke="#0f172a" stroke-width="1.8" />`
+          );
+        }
+
+        if (textGrp && textGrp.content.trim()) {
+          if (/\bdraw\b/i.test(nodeOpts) && /\bcircle\b/i.test(nodeOpts)) {
             const sp = toSvg(pt);
             svgElements.push(
-              `<line x1="${sp.x}" y1="${sp.y}" x2="${sp.x}" y2="${sp.y + 8}" stroke="#1e293b" stroke-width="2" />`,
-              `<line x1="${sp.x - 10}" y1="${sp.y + 8}" x2="${sp.x + 10}" y2="${sp.y + 8}" stroke="#1e293b" stroke-width="2" />`,
-              `<line x1="${sp.x - 6}" y1="${sp.y + 12}" x2="${sp.x + 6}" y2="${sp.y + 12}" stroke="#1e293b" stroke-width="2" />`,
-              `<line x1="${sp.x - 2.5}" y1="${sp.y + 16}" x2="${sp.x + 2.5}" y2="${sp.y + 16}" stroke="#1e293b" stroke-width="2" />`
+              `<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="14" fill="#ffffff" stroke="#1e293b" stroke-width="2" />`
             );
-          } else if (/\bcirc\b/i.test(nodeOpts)) {
-            const sp = toSvg(pt);
-            svgElements.push(`<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="3.5" fill="#0f172a" />`);
-          } else if (/\bocirc\b/i.test(nodeOpts)) {
-            const sp = toSvg(pt);
-            svgElements.push(
-              `<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="3.5" fill="#ffffff" stroke="#0f172a" stroke-width="1.8" />`
-            );
-          }
-
-          if (textGrp && textGrp.content.trim()) {
-            // Check if node is a drawn box/circle shape
-            if (/\bdraw\b/i.test(nodeOpts) && /\bcircle\b/i.test(nodeOpts)) {
-              const sp = toSvg(pt);
-              svgElements.push(
-                `<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="14" fill="#ffffff" stroke="#1e293b" stroke-width="2" />`
-              );
-            }
+            addLabel(pt, textGrp.content, nodeOpts);
+          } else if (
+            /\bdraw\b/i.test(nodeOpts) ||
+            /\balign\s*=\s*left\b/i.test(nodeOpts) ||
+            textGrp.content.includes('\\\\')
+          ) {
+            renderCodeOrBoxNode(pt, textGrp.content, nodeOpts);
+          } else {
             addLabel(pt, textGrp.content, nodeOpts);
           }
         }
@@ -703,21 +1045,60 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
         }
       }
 
+      const strokeColor = resolveStrokeColor(cmdOpts);
+      const fillColor = resolveFillColor(cmdOpts, cmdType);
+      const strokeWidth = /\bvery\s+thick\b/i.test(cmdOpts) ? '2.8' : /\bthin\b/i.test(cmdOpts) ? '1.3' : '2';
       const isDashed = /\bdashed\b/i.test(cmdOpts);
       const isDotted = /\bdotted\b/i.test(cmdOpts);
       const hasArrowEnd = /(?:->|-stealth|-latex)/i.test(cmdOpts);
       const hasArrowStart = /(?:<-|stealth-|latex-)/i.test(cmdOpts);
       const strokeDash = isDashed ? ' stroke-dasharray="6,4"' : isDotted ? ' stroke-dasharray="2,3"' : '';
       const isFilledWhite = /fill\s*=\s*white/i.test(cmdOpts);
-      const isSolidFill = cmdType === 'fill' || (cmdType === 'filldraw' && !isFilledWhite);
+      const isSolidFill = cmdType === 'fill' || (cmdType === 'filldraw' && !isFilledWhite) || fillColor !== 'none';
+
+      // Special check: plot (\x, {expr})
+      const plotMatch = rest.match(/plot\s*(?:\[[^\]]*\])?\s*\(\s*\\x\s*,\s*\{([^}]+)\}\s*\)/);
+      if (plotMatch) {
+        const fnExpr = plotMatch[1];
+        const domainMatch = (cmdOpts + ' ' + rest).match(/domain\s*=\s*([+-]?\d+(?:\.\d+)?)\s*:\s*([+-]?\d+(?:\.\d+)?)/);
+        const xMin = domainMatch ? parseFloat(domainMatch[1]) : 0;
+        const xMax = domainMatch ? parseFloat(domainMatch[2]) : 4;
+        const samples = 60;
+        const polyPts: string[] = [];
+        for (let k = 0; k <= samples; k++) {
+          const xv = xMin + ((xMax - xMin) * k) / samples;
+          const yv = evalPlotFunction(fnExpr, xv);
+          const pt: Point = { x: currentShift.x + xv * SCALE, y: currentShift.y + yv * SCALE };
+          trackPoint(pt.x, pt.y, 8);
+          const sp = toSvg(pt);
+          polyPts.push(`${sp.x.toFixed(1)},${sp.y.toFixed(1)}`);
+        }
+        svgElements.push(
+          `<polyline points="${polyPts.join(' ')}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash} />`
+        );
+        continue;
+      }
 
       // Tokenize path operations sequentially
       let cursor = 0;
       let currentPt: Point | null = null;
       let pathStartPt: Point | null = null;
-      let pendingOp: '--' | '|-' | '-|' | 'to' | 'rectangle' | null = null;
+      let polyChain: Point[] = [];
+      let pendingOp: '--' | '|-' | '-|' | 'to' | 'rectangle' | 'grid' | null = null;
       let pendingToOpts = '';
       let pendingSegmentLabel: { text: string; opts: string } | null = null;
+
+      const recordAxisCheck = (p1: Point, p2: Point) => {
+        if (!hasArrowEnd && !hasArrowStart) return;
+        // Horizontal axis along y = 0 passing through or starting at x = 0
+        if (Math.abs(p1.y) < 1 && Math.abs(p2.y) < 1 && Math.min(p1.x, p2.x) <= 1 && Math.max(p1.x, p2.x) >= -1) {
+          hasHorizontalAxisThroughOrigin = true;
+        }
+        // Vertical axis along x = 0 passing through or starting at y = 0
+        if (Math.abs(p1.x) < 1 && Math.abs(p2.x) < 1 && Math.min(p1.y, p2.y) <= 1 && Math.max(p1.y, p2.y) >= -1) {
+          hasVerticalAxisThroughOrigin = true;
+        }
+      };
 
       while (cursor < rest.length) {
         while (cursor < rest.length && /\s/.test(rest[cursor])) cursor++;
@@ -730,7 +1111,7 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
           const pEnd = rest.indexOf(')', pStart);
           if (pEnd !== -1) {
             const rawC = rest.slice(pStart, pEnd + 1);
-            const nextPt = parseCoord(rawC, currentPt || { x: 0, y: 0 }, true);
+            const nextPt = parseCoord(rawC, currentPt || { x: currentShift.x, y: currentShift.y }, true);
             cursor = pEnd + 1;
             if (nextPt) {
               if (currentPt && pendingOp) {
@@ -745,16 +1126,18 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
                   const ry = Math.min(s1.y, s2.y);
                   const rw = Math.abs(s2.x - s1.x);
                   const rh = Math.abs(s2.y - s1.y);
-                  const fillAttr = isFilledWhite ? '#ffffff' : isSolidFill ? '#0f172a' : 'none';
+                  const rectFill = fillColor !== 'none' ? fillColor : isFilledWhite ? '#ffffff' : isSolidFill ? '#0f172a' : 'none';
                   svgElements.push(
-                    `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="${fillAttr}" stroke="#1e293b" stroke-width="2"${strokeDash} />`
+                    `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="${rectFill}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash} />`
                   );
                 } else {
+                  recordAxisCheck(currentPt, nextPt);
                   const markerEnd = hasArrowEnd ? ' marker-end="url(#tikz-arrow)"' : '';
                   const markerStart = hasArrowStart ? ' marker-start="url(#tikz-arrow-start)"' : '';
                   svgElements.push(
-                    `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="#1e293b" stroke-width="2"${strokeDash}${markerStart}${markerEnd} />`
+                    `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash}${markerStart}${markerEnd} />`
                   );
+                  polyChain.push(nextPt);
                   if (pendingSegmentLabel) {
                     const mid: Point = {
                       x: (currentPt.x + nextPt.x) / 2,
@@ -765,6 +1148,8 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
                   }
                 }
                 pendingOp = null;
+              } else {
+                polyChain = [nextPt];
               }
               if (isUpdate || !currentPt) {
                 currentPt = nextPt;
@@ -794,28 +1179,61 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
                   const ry = Math.min(s1.y, s2.y);
                   const rw = Math.abs(s2.x - s1.x);
                   const rh = Math.abs(s2.y - s1.y);
-                  const fillAttr = isFilledWhite ? '#ffffff' : isSolidFill ? '#0f172a' : '#ffffff';
+                  const rectFill = fillColor !== 'none' ? fillColor : isFilledWhite ? '#ffffff' : '#ffffff';
+                  const rectStroke = cmdType === 'fill' && !/draw/.test(cmdOpts) ? 'none' : strokeColor;
                   svgElements.push(
-                    `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="${fillAttr}" stroke="#1e293b" stroke-width="2"${strokeDash} />`
+                    `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="${rectFill}" stroke="${rectStroke}" stroke-width="${strokeWidth}"${strokeDash} />`
                   );
+                } else if (pendingOp === 'grid') {
+                  // Draw grid from currentPt to nextPt
+                  const gx1 = Math.min(currentPt.x, nextPt.x);
+                  const gx2 = Math.max(currentPt.x, nextPt.x);
+                  const gy1 = Math.min(currentPt.y, nextPt.y);
+                  const gy2 = Math.max(currentPt.y, nextPt.y);
+                  const spanX = (gx2 - gx1) / SCALE;
+                  // Auto-detect 1.2cm step for 3.6x3.6 3x3 grids (e.g. Q17/Q58), else 1.0cm
+                  let stepCm = 1.0;
+                  const stepMatch = cmdOpts.match(/step\s*=\s*([^,\]]+)/);
+                  if (stepMatch) {
+                    stepCm = evalNum(stepMatch[1], 1);
+                  } else if (Math.abs(spanX - 3.6) < 0.05) {
+                    stepCm = 1.2;
+                  }
+                  const stepPx = stepCm * SCALE;
+                  for (let x = gx1; x <= gx2 + 0.5; x += stepPx) {
+                    const pA = toSvg({ x, y: gy1 });
+                    const pB = toSvg({ x, y: gy2 });
+                    svgElements.push(
+                      `<line x1="${pA.x.toFixed(1)}" y1="${pA.y.toFixed(1)}" x2="${pB.x.toFixed(1)}" y2="${pB.y.toFixed(1)}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />`
+                    );
+                  }
+                  for (let y = gy1; y <= gy2 + 0.5; y += stepPx) {
+                    const pA = toSvg({ x: gx1, y });
+                    const pB = toSvg({ x: gx2, y });
+                    svgElements.push(
+                      `<line x1="${pA.x.toFixed(1)}" y1="${pA.y.toFixed(1)}" x2="${pB.x.toFixed(1)}" y2="${pB.y.toFixed(1)}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />`
+                    );
+                  }
                 } else if (pendingOp === '|-') {
                   const corner: Point = { x: currentPt.x, y: nextPt.y };
                   const sc = toSvg(corner);
                   svgElements.push(
-                    `<polyline points="${s1.x.toFixed(1)},${s1.y.toFixed(1)} ${sc.x.toFixed(1)},${sc.y.toFixed(1)} ${s2.x.toFixed(1)},${s2.y.toFixed(1)}" fill="none" stroke="#1e293b" stroke-width="2"${strokeDash} />`
+                    `<polyline points="${s1.x.toFixed(1)},${s1.y.toFixed(1)} ${sc.x.toFixed(1)},${sc.y.toFixed(1)} ${s2.x.toFixed(1)},${s2.y.toFixed(1)}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash} />`
                   );
                 } else if (pendingOp === '-|') {
                   const corner: Point = { x: nextPt.x, y: currentPt.y };
                   const sc = toSvg(corner);
                   svgElements.push(
-                    `<polyline points="${s1.x.toFixed(1)},${s1.y.toFixed(1)} ${sc.x.toFixed(1)},${sc.y.toFixed(1)} ${s2.x.toFixed(1)},${s2.y.toFixed(1)}" fill="none" stroke="#1e293b" stroke-width="2"${strokeDash} />`
+                    `<polyline points="${s1.x.toFixed(1)},${s1.y.toFixed(1)} ${sc.x.toFixed(1)},${sc.y.toFixed(1)} ${s2.x.toFixed(1)},${s2.y.toFixed(1)}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash} />`
                   );
                 } else {
+                  recordAxisCheck(currentPt, nextPt);
                   const markerEnd = hasArrowEnd ? ' marker-end="url(#tikz-arrow)"' : '';
                   const markerStart = hasArrowStart ? ' marker-start="url(#tikz-arrow-start)"' : '';
                   svgElements.push(
-                    `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="#1e293b" stroke-width="2"${strokeDash}${markerStart}${markerEnd} />`
+                    `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash}${markerStart}${markerEnd} />`
                   );
+                  polyChain.push(nextPt);
                   if (pendingSegmentLabel) {
                     const mid: Point = {
                       x: (currentPt.x + nextPt.x) / 2,
@@ -826,6 +1244,10 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
                   }
                 }
                 pendingOp = null;
+              } else {
+                // Start of a new disconnected sub-path within the same \draw command
+                pathStartPt = nextPt;
+                polyChain = [nextPt];
               }
               currentPt = nextPt;
               if (!pathStartPt) pathStartPt = nextPt;
@@ -834,7 +1256,7 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
           }
         }
 
-        // Operators: --, |-, -|, rectangle, circle, to[...], node[...]{...}, cycle
+        // Operators: --, |-, -|, rectangle, grid, arc, circle, to[...], node[...]{...}, cycle
         if (rest.startsWith('--', cursor)) {
           pendingOp = '--';
           cursor += 2;
@@ -851,12 +1273,26 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
           continue;
         }
         if (rest.startsWith('cycle', cursor)) {
-          if (currentPt && pathStartPt && pendingOp === '--') {
-            const s1 = toSvg(currentPt);
-            const s2 = toSvg(pathStartPt);
-            svgElements.push(
-              `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="#1e293b" stroke-width="2"${strokeDash} />`
-            );
+          if (currentPt && pathStartPt) {
+            if (fillColor !== 'none' && polyChain.length >= 3) {
+              const ptsAttr = polyChain
+                .map((pt) => {
+                  const sp = toSvg(pt);
+                  return `${sp.x.toFixed(1)},${sp.y.toFixed(1)}`;
+                })
+                .join(' ');
+              const polyStroke = cmdType === 'fill' && !/draw/.test(cmdOpts) ? 'none' : strokeColor;
+              svgElements.push(
+                `<polygon points="${ptsAttr}" fill="${fillColor}" stroke="${polyStroke}" stroke-width="${strokeWidth}" />`
+              );
+            } else if (pendingOp === '--') {
+              const s1 = toSvg(currentPt);
+              const s2 = toSvg(pathStartPt);
+              svgElements.push(
+                `<line x1="${s1.x.toFixed(1)}" y1="${s1.y.toFixed(1)}" x2="${s2.x.toFixed(1)}" y2="${s2.y.toFixed(1)}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash} />`
+              );
+            }
+            currentPt = pathStartPt;
           }
           pendingOp = null;
           cursor += 5;
@@ -865,6 +1301,52 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
         if (rest.startsWith('rectangle', cursor)) {
           pendingOp = 'rectangle';
           cursor += 9;
+          continue;
+        }
+        if (rest.startsWith('grid', cursor) && (cursor + 4 >= rest.length || /[\s\(]/.test(rest[cursor + 4]))) {
+          pendingOp = 'grid';
+          cursor += 4;
+          continue;
+        }
+        if (rest.startsWith('arc', cursor) && (cursor + 3 >= rest.length || /[\s\(\[]/.test(rest[cursor + 3]))) {
+          cursor += 3;
+          while (cursor < rest.length && /\s/.test(rest[cursor])) cursor++;
+          if (rest[cursor] === '(') {
+            const pEnd = rest.indexOf(')', cursor);
+            if (pEnd !== -1) {
+              const arcSpec = rest.slice(cursor + 1, pEnd).trim();
+              cursor = pEnd + 1;
+              const parts = arcSpec.split(':');
+              if (parts.length === 3 && currentPt) {
+                const startDeg = evalSimpleMath(parts[0]);
+                const endDeg = evalSimpleMath(parts[1]);
+                const rPx = evalNum(parts[2], SCALE);
+                const startRad = (startDeg * Math.PI) / 180;
+                const cx = currentPt.x - rPx * Math.cos(startRad);
+                const cy = currentPt.y - rPx * Math.sin(startRad);
+                const steps = 18;
+                const arcPts: string[] = [];
+                let lastArcPt = currentPt;
+                for (let s = 0; s <= steps; s++) {
+                  const deg = startDeg + ((endDeg - startDeg) * s) / steps;
+                  const rad = (deg * Math.PI) / 180;
+                  const px = cx + rPx * Math.cos(rad);
+                  const py = cy + rPx * Math.sin(rad);
+                  lastArcPt = { x: px, y: py };
+                  trackPoint(px, py, 6);
+                  polyChain.push(lastArcPt);
+                  const sp = toSvg(lastArcPt);
+                  arcPts.push(`${sp.x.toFixed(1)},${sp.y.toFixed(1)}`);
+                }
+                svgElements.push(
+                  `<polyline points="${arcPts.join(' ')}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}"${strokeDash} />`
+                );
+                currentPt = lastArcPt;
+                pendingOp = null;
+              }
+              continue;
+            }
+          }
           continue;
         }
         if (rest.startsWith('to', cursor) && (cursor + 2 >= rest.length || /[\s\[]/.test(rest[cursor + 2]))) {
@@ -903,10 +1385,10 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
           if (currentPt) {
             const sp = toSvg(currentPt);
             trackPoint(currentPt.x, currentPt.y, radius + 6);
-            const fillColor = isFilledWhite ? '#ffffff' : isSolidFill ? '#0f172a' : 'none';
-            const strokeAttr = cmdType === 'fill' ? 'none' : '#1e293b';
+            const cFill = fillColor !== 'none' ? fillColor : isFilledWhite ? '#ffffff' : cmdType === 'fill' ? '#0f172a' : 'none';
+            const strokeAttr = cmdType === 'fill' ? 'none' : strokeColor;
             svgElements.push(
-              `<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="${Math.max(2.5, radius).toFixed(1)}" fill="${fillColor}" stroke="${strokeAttr}" stroke-width="2"${strokeDash} />`
+              `<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="${Math.max(2.5, radius).toFixed(1)}" fill="${cFill}" stroke="${strokeAttr}" stroke-width="${strokeWidth}"${strokeDash} />`
             );
           }
           continue;
@@ -944,7 +1426,7 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
             const grp = extractBraceContent(rest, cursor);
             if (grp) {
               cursor = grp.endIndex;
-              if ( /\bcirc\b/i.test(nOpts) && currentPt) {
+              if (/\bcirc\b/i.test(nOpts) && currentPt) {
                 const sp = toSvg(currentPt);
                 svgElements.push(`<circle cx="${sp.x.toFixed(1)}" cy="${sp.y.toFixed(1)}" r="3.5" fill="#0f172a" />`);
               } else if (/\bocirc\b/i.test(nOpts) && currentPt) {
@@ -996,6 +1478,12 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
     }
   }
 
+  // If this diagram is a 2D coordinate graph with horizontal & vertical axes meeting at (0,0)
+  // and no explicit '0' label was placed at (0,0), automatically add '0' at the origin.
+  if (hasHorizontalAxisThroughOrigin && hasVerticalAxisThroughOrigin && !hasExplicitOriginZeroLabel) {
+    addLabel({ x: 0, y: 0 }, '0', 'below left');
+  }
+
   if (svgElements.length === 0 && labelElements.length === 0) {
     return undefined;
   }
@@ -1021,13 +1509,13 @@ export function renderTikzToSvgDataUrl(tikzSource: string): string | undefined {
     maxY = 180;
   }
 
-  const pad = 24;
+  const pad = 22;
   const vbX = Math.floor(minX - pad);
   const vbY = Math.floor(minY - pad);
   const vbW = Math.max(120, Math.ceil(maxX - minX + pad * 2));
-  const vbH = Math.max(90, Math.ceil(maxY - minY + pad * 2));
+  const vbH = Math.max(75, Math.ceil(maxY - minY + pad * 2));
 
-  const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbX} ${vbY} ${vbW} ${vbH}" width="${Math.min(520, Math.max(240, vbW))}" height="${Math.min(380, Math.max(150, vbH))}" style="background:#ffffff;border-radius:12px;">
+  const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbX} ${vbY} ${vbW} ${vbH}" width="${Math.min(540, Math.max(240, vbW))}" height="${Math.min(400, Math.max(110, vbH))}" style="background:#ffffff;border-radius:12px;">
     <defs>
       <marker id="tikz-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#1e293b" />
