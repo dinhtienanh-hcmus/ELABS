@@ -186,31 +186,56 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
     }
   }, [answers, markedForReview, remainingSeconds, sessionKey]);
 
-  // Heartbeat ping to storage for live monitoring & zero-lag synchronization
-  useEffect(() => {
-    const ping = () => {
-      saveActiveTakerPing({
-        sessionId: sessionIdRef.current,
-        examId: exam.id,
-        fullName: candidateInfo.fullName,
-        candidateCode: candidateInfo.candidateCode,
-        className: candidateInfo.className,
-        startedAt: Date.now() - (totalSeconds - remainingSeconds) * 1000,
-        lastPing: Date.now(),
-        answeredCount: Object.keys(answers).length,
-        totalQuestions: displayQuestions.length,
-        tabSwitchCount,
-        isCurrentlyFullscreen: isFullscreenActive
-      });
-    };
+  const examStartedAtRef = useRef<number>(Date.now());
+  const liveStateRef = useRef({
+    answeredCount: Object.keys(answers).length,
+    totalQuestions: displayQuestions.length,
+    tabSwitchCount,
+    isFullscreenActive
+  });
 
-    ping();
-    const interval = setInterval(ping, 3500);
+  useEffect(() => {
+    liveStateRef.current = {
+      answeredCount: Object.keys(answers).length,
+      totalQuestions: displayQuestions.length,
+      tabSwitchCount,
+      isFullscreenActive
+    };
+  }, [answers, displayQuestions.length, tabSwitchCount, isFullscreenActive]);
+
+  const sendHeartbeatPing = useCallback(() => {
+    const st = liveStateRef.current;
+    saveActiveTakerPing({
+      sessionId: sessionIdRef.current,
+      examId: exam.id,
+      fullName: candidateInfo.fullName,
+      candidateCode: candidateInfo.candidateCode,
+      className: candidateInfo.className,
+      startedAt: examStartedAtRef.current,
+      lastPing: Date.now(),
+      answeredCount: st.answeredCount,
+      totalQuestions: st.totalQuestions,
+      tabSwitchCount: st.tabSwitchCount,
+      isCurrentlyFullscreen: st.isFullscreenActive
+    });
+  }, [exam.id, candidateInfo.fullName, candidateInfo.candidateCode, candidateInfo.className]);
+
+  // Heartbeat ping every 45s (and only removeActiveTaker once when leaving ExamRoom)
+  useEffect(() => {
+    sendHeartbeatPing();
+    const interval = setInterval(sendHeartbeatPing, 45000);
     return () => {
       clearInterval(interval);
       removeActiveTaker(sessionIdRef.current);
     };
-  }, [exam.id, candidateInfo, answers, displayQuestions.length, tabSwitchCount, remainingSeconds, totalSeconds, isFullscreenActive]);
+  }, [sendHeartbeatPing]);
+
+  // Also send an immediate ping if a fullscreen/tab violation occurs
+  useEffect(() => {
+    if (tabSwitchCount > 0) {
+      sendHeartbeatPing();
+    }
+  }, [tabSwitchCount, sendHeartbeatPing]);
 
   // Handle final submission (normal or disqualified)
   const handleFinalSubmit = useCallback(

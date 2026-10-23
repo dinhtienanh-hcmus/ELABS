@@ -180,10 +180,20 @@ export function saveAttempt(attempt: CandidateAttempt): void {
     console.error('Failed to save attempt locally', e);
   }
 
-  setDoc(doc(db, 'attempts', docId), cleanForFirestore(normalizedAttempt)).catch(
-    (error) =>
-      handleFirestoreError(error, OperationType.WRITE, `attempts/${docId}`)
-  );
+  const payload = cleanForFirestore(normalizedAttempt);
+  const writeWithRetry = async (retriesLeft: number, delayMs: number): Promise<void> => {
+    try {
+      await setDoc(doc(db, 'attempts', docId), payload);
+    } catch (error) {
+      if (retriesLeft > 0) {
+        await new Promise((r) => setTimeout(r, delayMs + Math.random() * 400));
+        return writeWithRetry(retriesLeft - 1, delayMs * 2);
+      }
+      handleFirestoreError(error, OperationType.WRITE, `attempts/${docId}`);
+    }
+  };
+
+  writeWithRetry(4, 600);
 }
 
 export async function clearExamAttemptsFromCloud(

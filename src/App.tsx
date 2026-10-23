@@ -57,7 +57,7 @@ export default function App() {
   const [liveMonitorExam, setLiveMonitorExam] = useState<Exam | null>(null);
   const [submissionsExam, setSubmissionsExam] = useState<Exam | null>(null);
 
-  // Subscribe to real-time Cloud Firestore updates
+  // Subscribe to Cloud Firestore Exams (lightweight: 1-2 docs per student)
   useEffect(() => {
     const unsubExams = subscribeToCloudExams(
       (cloudExams) => {
@@ -68,6 +68,15 @@ export default function App() {
       }
     );
 
+    return () => {
+      unsubExams();
+    };
+  }, []);
+
+  // Only subscribe to Attempts & ActiveTakers when BTC is logged in (prevents 100x read fan-out on student devices!)
+  useEffect(() => {
+    if (!isBtcLoggedIn) return;
+
     const unsubAttempts = subscribeToCloudAttempts((cloudAttempts) => {
       setAttempts(cloudAttempts);
     });
@@ -76,21 +85,17 @@ export default function App() {
       setActiveCount(activeTakers.length);
     });
 
-    return () => {
-      unsubExams();
-      unsubAttempts();
-      unsubActiveTakers();
-    };
-  }, []);
-
-  // Also periodically prune stale active takers locally
-  useEffect(() => {
     const interval = setInterval(() => {
       const active = loadActiveTakers();
       setActiveCount(active.length);
     }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+
+    return () => {
+      unsubAttempts();
+      unsubActiveTakers();
+      clearInterval(interval);
+    };
+  }, [isBtcLoggedIn]);
 
   // Persist exams changes
   const handleUpdateExams = useCallback((updated: Exam[]) => {
