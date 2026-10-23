@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidExam(data) {
+      return data.keys().hasAll(['id', 'code', 'title', 'durationMinutes', 'totalPoints', 'status', 'questions'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.code is string && data.code.size() >= 1 && data.code.size() <= 64
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 500
+        && data.durationMinutes is number && data.durationMinutes >= 1 && data.durationMinutes <= 1440
+        && data.totalPoints is number && data.totalPoints >= 0 && data.totalPoints <= 10000
+        && data.status in ['published', 'draft', 'closed']
+        && data.questions is list && data.questions.size() <= 500;
+    }
+
+    function isValidAttempt(data) {
+      return data.keys().hasAll(['id', 'examId', 'candidateInfo', 'startedAt', 'status'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.examId is string && data.examId.size() >= 1 && data.examId.size() <= 128
+        && data.candidateInfo is map
+        && data.startedAt is number
+        && data.status in ['in_progress', 'submitted', 'timed_out', 'disqualified'];
+    }
+
+    function isValidActiveTaker(data) {
+      return data.keys().hasAll(['sessionId', 'examId', 'fullName', 'candidateCode', 'lastPing'])
+        && data.sessionId is string && data.sessionId.size() >= 1 && data.sessionId.size() <= 128
+        && data.examId is string && data.examId.size() >= 1 && data.examId.size() <= 128
+        && data.fullName is string && data.fullName.size() <= 200
+        && data.candidateCode is string && data.candidateCode.size() <= 100
+        && data.lastPing is number;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+    match /exams/{examId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(examId) && isValidExam(request.resource.data);
+      allow delete: if isValidId(examId);
+    }
+
+    match /attempts/{attemptId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(attemptId) && isValidAttempt(request.resource.data);
+      allow delete: if isValidId(attemptId);
+    }
+
+    match /activeTakers/{sessionId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(sessionId) && isValidActiveTaker(request.resource.data);
+      allow delete: if isValidId(sessionId);
+    }
+
+    match /system/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId);
+      allow delete: if isValidId(docId);
+    }
+  }
+}

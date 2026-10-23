@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "Exam": {
+      "title": "Exam",
+      "description": "An online exam created by BTC including settings, sections, and LaTeX/TikZ questions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique exam identifier" },
+        "code": { "type": "string", "description": "Exam room code (e.g. ELABS-SANG)" },
+        "title": { "type": "string", "description": "Exam title" },
+        "durationMinutes": { "type": "number", "description": "Duration in minutes" },
+        "totalPoints": { "type": "number", "description": "Total points for main questions" },
+        "pointDistribution": { "type": "string", "enum": ["equal", "custom"] },
+        "status": { "type": "string", "enum": ["published", "draft", "closed"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "code", "title", "durationMinutes", "totalPoints", "status", "questions"]
+    },
+    "CandidateAttempt": {
+      "title": "CandidateAttempt",
+      "description": "A candidate's exam submission, score, and anti-cheat logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "startedAt": { "type": "number" },
+        "submittedAt": { "type": "number" },
+        "timeSpentSeconds": { "type": "number" },
+        "score": { "type": "number" },
+        "status": { "type": "string", "enum": ["in_progress", "submitted", "timed_out", "disqualified"] }
+      },
+      "required": ["id", "examId", "candidateInfo", "startedAt", "status"]
+    },
+    "ActiveTaker": {
+      "title": "ActiveTaker",
+      "description": "Real-time heartbeat from a candidate currently taking an exam.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "examId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "candidateCode": { "type": "string" },
+        "className": { "type": "string" },
+        "startedAt": { "type": "number" },
+        "lastPing": { "type": "number" },
+        "answeredCount": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "tabSwitchCount": { "type": "number" }
+      },
+      "required": ["sessionId", "examId", "fullName", "candidateCode", "lastPing"]
+    },
+    "SystemMeta": {
+      "title": "SystemMeta",
+      "description": "System synchronization metadata.",
+      "type": "object",
+      "properties": {
+        "initialized": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["initialized", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/exams/{examId}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "Stores published and draft exams accessible to candidates and BTC."
+    },
+    "/attempts/{attemptId}": {
+      "schema": { "$ref": "#/entities/CandidateAttempt" },
+      "description": "Stores candidate exam attempts and graded submissions."
+    },
+    "/activeTakers/{sessionId}": {
+      "schema": { "$ref": "#/entities/ActiveTaker" },
+      "description": "Stores real-time active candidate sessions for live monitoring."
+    },
+    "/system/{docId}": {
+      "schema": { "$ref": "#/entities/SystemMeta" },
+      "description": "Stores system initialization state."
+    }
+  }
+}

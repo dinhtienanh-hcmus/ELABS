@@ -1,0 +1,8 @@
+{
+  "name": "ELABS",
+  "description": "Hệ thống tổ chức thi trắc nghiệm trực tuyến chuẩn LaTeX/TeX với hình ảnh, chia điểm, giám sát chống gian lận và tối ưu chịu tải cao trên 100 thí sinh đồng thời không giật lag.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
