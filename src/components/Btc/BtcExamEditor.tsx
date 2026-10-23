@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Exam,
   ExamSection,
@@ -17,6 +17,7 @@ import {
   Plus,
   Trash2,
   Upload,
+  Download,
   Check,
   RefreshCw,
   Image as ImageIcon,
@@ -269,6 +270,95 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
 
   const [texParseSuccessMsg, setTexParseSuccessMsg] = useState('');
   const [texErrorMsg, setTexErrorMsg] = useState('');
+  const editorFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleExportCurrentExamJson = () => {
+    const currentExamSnapshot: Exam = {
+      id: initialExam?.id || `exam_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      code: code.trim().toUpperCase() || 'ELABS-2026',
+      title: title.trim() || 'Đề thi trắc nghiệm ELABS',
+      sections,
+      durationMinutes: Number(durationMinutes) || 45,
+      totalPoints: Number(totalPoints) || 10,
+      pointDistribution: 'equal',
+      password: password.trim(),
+      settings: {
+        sequentialParts,
+        shuffleQuestions,
+        shuffleOptions,
+        requireFullscreen,
+        strictFullscreenLock,
+        trackTabSwitch,
+        maxTabSwitches: Number(maxTabSwitches) || 3,
+        autoSubmitOnMaxViolations,
+        showResultImmediately,
+        showExplanations,
+        allowReviewAnswers: true,
+        candidateFields,
+        allowDemoFill,
+        entryRuleNote: entryRuleNote.trim(),
+        maxAttempts: Number(maxAttempts) >= 0 ? Number(maxAttempts) : 1
+      },
+      questions,
+      status: initialExam?.status || 'published',
+      createdAt: initialExam?.createdAt || Date.now(),
+      updatedAt: Date.now()
+    };
+    const dataStr = JSON.stringify(currentExamSnapshot, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Exam_${(currentExamSnapshot.code || 'ELABS').replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportCurrentExamJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(String(event.target?.result || '{}'));
+        if (parsed && Array.isArray(parsed.questions)) {
+          if (parsed.code) setCode(parsed.code);
+          if (parsed.title) setTitle(parsed.title);
+          if (parsed.durationMinutes) setDurationMinutes(parsed.durationMinutes);
+          if (parsed.totalPoints) setTotalPoints(parsed.totalPoints);
+          if (parsed.password) setPassword(parsed.password);
+          if (Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+            setSections(parsed.sections);
+          }
+          if (parsed.settings) {
+            if (typeof parsed.settings.sequentialParts === 'boolean') setSequentialParts(parsed.settings.sequentialParts);
+            if (typeof parsed.settings.shuffleQuestions === 'boolean') setShuffleQuestions(parsed.settings.shuffleQuestions);
+            if (typeof parsed.settings.shuffleOptions === 'boolean') setShuffleOptions(parsed.settings.shuffleOptions);
+            if (typeof parsed.settings.requireFullscreen === 'boolean') setRequireFullscreen(parsed.settings.requireFullscreen);
+            if (typeof parsed.settings.strictFullscreenLock === 'boolean') setStrictFullscreenLock(parsed.settings.strictFullscreenLock);
+            if (typeof parsed.settings.trackTabSwitch === 'boolean') setTrackTabSwitch(parsed.settings.trackTabSwitch);
+            if (typeof parsed.settings.maxTabSwitches === 'number') setMaxTabSwitches(parsed.settings.maxTabSwitches);
+            if (typeof parsed.settings.autoSubmitOnMaxViolations === 'boolean') setAutoSubmitOnMaxViolations(parsed.settings.autoSubmitOnMaxViolations);
+            if (typeof parsed.settings.showResultImmediately === 'boolean') setShowResultImmediately(parsed.settings.showResultImmediately);
+            if (typeof parsed.settings.showExplanations === 'boolean') setShowExplanations(parsed.settings.showExplanations);
+            if (Array.isArray(parsed.settings.candidateFields)) setCandidateFields(parsed.settings.candidateFields);
+            if (typeof parsed.settings.allowDemoFill === 'boolean') setAllowDemoFill(parsed.settings.allowDemoFill);
+            if (typeof parsed.settings.entryRuleNote === 'string') setEntryRuleNote(parsed.settings.entryRuleNote);
+            if (typeof parsed.settings.maxAttempts === 'number') setMaxAttempts(parsed.settings.maxAttempts);
+          }
+          setQuestions(parsed.questions);
+          setTexParseSuccessMsg(`Đã nạp thành công đề "${parsed.title || parsed.code}" gồm ${parsed.questions.length} câu hỏi từ file JSON!`);
+          setTexErrorMsg('');
+        } else {
+          setTexErrorMsg('File JSON không đúng cấu trúc đề thi (thiếu danh sách questions).');
+        }
+      } catch {
+        setTexErrorMsg('Không thể đọc file JSON này. Vui lòng kiểm tra lại định dạng tệp!');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   // Questions array: start empty for new exams, or initialExam's sanitized questions when editing
   const [questions, setQuestions] = useState<Question[]>(() => {
@@ -1085,7 +1175,35 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={editorFileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImportCurrentExamJson}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={() => editorFileInputRef.current?.click()}
+            className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Nạp đề thi từ file .json trong máy tính"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Nạp file (.json)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCurrentExamJson}
+            className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Tải bản sao lưu đề thi này về máy (.json) để lưu trữ an toàn"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Tải về máy (.json)</span>
+          </button>
+
           <button
             type="button"
             onClick={onCancel}

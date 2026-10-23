@@ -27,6 +27,7 @@ import { BtcExamEditor } from './components/Btc/BtcExamEditor';
 import { BtcLiveMonitor } from './components/Btc/BtcLiveMonitor';
 import { BtcSubmissionsView } from './components/Btc/BtcSubmissionsView';
 import { BtcLoginModal } from './components/Btc/BtcLoginModal';
+import { auth, signOut, onAuthStateChanged, isUserAdmin } from './firebase';
 
 export default function App() {
   // Global Data State
@@ -39,6 +40,26 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<'candidate' | 'btc'>('candidate');
   const [isBtcLoggedIn, setIsBtcLoggedIn] = useState<boolean>(false);
   const [showBtcLoginModal, setShowBtcLoginModal] = useState<boolean>(false);
+
+  // Sync auth state with BTC session
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (isUserAdmin(user)) {
+        setIsBtcLoggedIn(true);
+      }
+    });
+    return () => unsubAuth();
+  }, []);
+
+  const handleBtcLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    setIsBtcLoggedIn(false);
+    setCurrentTab('candidate');
+  };
 
   // Candidate Journey State
   const [selectedExamForEntry, setSelectedExamForEntry] = useState<Exam | null>(null);
@@ -259,7 +280,7 @@ export default function App() {
           isBtcLoggedIn={isBtcLoggedIn}
           onSelectTab={handleSelectTab}
           onOpenBtcLogin={() => setShowBtcLoginModal(true)}
-          onBtcLogout={() => setIsBtcLoggedIn(false)}
+          onBtcLogout={handleBtcLogout}
         />
         <main className="flex-1 py-4">
           <ExamResultView
@@ -284,10 +305,7 @@ export default function App() {
         isBtcLoggedIn={isBtcLoggedIn}
         onSelectTab={handleSelectTab}
         onOpenBtcLogin={() => setShowBtcLoginModal(true)}
-        onBtcLogout={() => {
-          setIsBtcLoggedIn(false);
-          setCurrentTab('candidate');
-        }}
+        onBtcLogout={handleBtcLogout}
       />
 
       {/* Main View Switcher */}

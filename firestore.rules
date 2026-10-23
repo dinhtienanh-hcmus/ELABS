@@ -8,6 +8,15 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (
+          request.auth.token.email == 'dinhtienanh.hcmus@gmail.com' ||
+          request.auth.token.email == 'hocthuatelabs.hcmus@gmail.com'
+        );
+    }
+
     function isValidExam(data) {
       return data.keys().hasAll(['id', 'code', 'title', 'durationMinutes', 'totalPoints', 'status', 'questions'])
         && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
@@ -42,14 +51,14 @@ service cloud.firestore {
     // ===============================================================
     match /exams/{examId} {
       allow get, list: if true;
-      allow create, update: if isValidId(examId) && isValidExam(request.resource.data);
-      allow delete: if isValidId(examId);
+      allow create, update: if isAdmin() && isValidId(examId) && isValidExam(request.resource.data);
+      allow delete: if isAdmin() && isValidId(examId);
     }
 
     match /attempts/{attemptId} {
       allow get, list: if true;
       allow create, update: if isValidId(attemptId) && isValidAttempt(request.resource.data);
-      allow delete: if isValidId(attemptId);
+      allow delete: if isAdmin() && isValidId(attemptId);
     }
 
     match /activeTakers/{sessionId} {
@@ -60,8 +69,8 @@ service cloud.firestore {
 
     match /system/{docId} {
       allow get, list: if true;
-      allow create, update: if isValidId(docId);
-      allow delete: if isValidId(docId);
+      allow create, update: if isAdmin() && isValidId(docId);
+      allow delete: if isAdmin() && isValidId(docId);
     }
   }
 }

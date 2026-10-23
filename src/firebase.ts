@@ -1,11 +1,31 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  type User
+} from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+
+export const ADMIN_EMAILS = [
+  'dinhtienanh.hcmus@gmail.com',
+  'hocthuatelabs.hcmus@gmail.com'
+];
+
+export function isUserAdmin(user: User | null): boolean {
+  if (!user || !user.email) return false;
+  return ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+}
+
+export { signInWithPopup, signOut, onAuthStateChanged, type User };
 
 export enum OperationType {
   CREATE = 'create',
