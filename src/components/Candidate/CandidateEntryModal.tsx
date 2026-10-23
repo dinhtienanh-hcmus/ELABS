@@ -229,9 +229,11 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
                 Thí sinh <strong>{candidateCodeInput.toUpperCase() || fullNameInput}</strong> đã hoàn thành bài thi cho đề thi này ({candidatePreviousAttempts.length} lần nộp bài).
               </p>
               <div className="bg-white/80 p-2.5 rounded-xl border border-red-200 flex items-center justify-between text-xs font-semibold">
-                <span>Điểm số cao nhất đã đạt:</span>
+                <span>{exam.settings.showResultImmediately !== false ? 'Điểm số cao nhất đã đạt:' : 'Trạng thái bài làm:'}</span>
                 <span className="text-blue-700 font-bold text-sm">
-                  {Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ
+                  {exam.settings.showResultImmediately !== false
+                    ? `${Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ`
+                    : 'Đã lưu an toàn (Chờ BTC công bố)'}
                 </span>
               </div>
               <p className="text-[11px] text-red-700 italic pt-0.5">
@@ -245,7 +247,12 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-xs flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
-                Bạn đã thi <strong>{candidatePreviousAttempts.length}/{maxAttempts} lượt</strong>. Điểm số cao nhất hiện tại: <strong>{Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ</strong>.
+                Bạn đã thi <strong>{candidatePreviousAttempts.length}/{maxAttempts} lượt</strong>.
+                {exam.settings.showResultImmediately !== false ? (
+                  <> Điểm số cao nhất hiện tại: <strong>{Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ</strong>.</>
+                ) : (
+                  <> Điểm số sẽ được BTC công bố sau theo kế hoạch.</>
+                )}
               </span>
             </div>
           )}

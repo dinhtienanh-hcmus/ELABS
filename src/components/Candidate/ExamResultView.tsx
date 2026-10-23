@@ -14,7 +14,9 @@ import {
   Sparkles,
   HelpCircle,
   Check,
-  ZoomIn
+  ZoomIn,
+  Lock,
+  FileCheck
 } from 'lucide-react';
 
 interface ExamResultViewProps {
@@ -33,8 +35,9 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
   const [lightboxImage, setLightboxImage] = useState<{ src: string; caption?: string } | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'wrong' | 'correct'>('all');
 
+  const canShowScore = exam.settings.showResultImmediately !== false;
   const score = attempt.score ?? 0;
-  const isHighPerformer = score >= 8.0;
+  const isHighPerformer = canShowScore && score >= 8.0;
 
   useEffect(() => {
     if (isHighPerformer) {
@@ -52,6 +55,9 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
 
   const minutesSpent = Math.floor(attempt.timeSpentSeconds / 60);
   const secondsSpent = attempt.timeSpentSeconds % 60;
+  const answeredCount = Object.keys(attempt.answers || {}).length;
+  const maxAttempts = exam.settings.maxAttempts ?? 1;
+  const canRetake = maxAttempts === 0 || maxAttempts > 1;
 
   const filteredQuestions = exam.questions.filter((q) => {
     const studentChoice = attempt.answers[q.id];
@@ -90,7 +96,34 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
               Bài thi đã được tự động nộp do hết thời gian làm bài ({exam.durationMinutes} phút)
             </h2>
             <p className="text-xs text-amber-50 leading-relaxed font-medium">
-              Hệ thống đã tự động thu bài và bảo lưu toàn bộ câu trả lời bạn đã chọn. Kết quả và điểm số bên dưới đã được tính toán đầy đủ và chính xác dựa trên tiến trình bạn đã làm.
+              {canShowScore
+                ? 'Hệ thống đã tự động thu bài và bảo lưu toàn bộ câu trả lời bạn đã chọn. Kết quả và điểm số bên dưới đã được tính toán đầy đủ và chính xác dựa trên tiến trình bạn đã làm.'
+                : 'Hệ thống đã tự động thu bài và bảo lưu an toàn toàn bộ các câu trả lời bạn đã chọn. Ban tổ chức sẽ chấm và công bố kết quả sau theo quy chế thi.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* When score is NOT published yet */}
+      {!canShowScore && (
+        <div className="p-5 bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200/90 text-slate-800 rounded-3xl shadow-xs flex items-start gap-4">
+          <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+            <Lock className="w-5 h-5 text-white" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider">
+                Bảo mật điểm thi
+              </span>
+              <span className="text-xs font-bold text-blue-900">
+                Đề thi không công bố điểm ngay sau khi nộp
+              </span>
+            </div>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              Bài làm của bạn đã được ghi nhận và nộp thành công!
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              Hệ thống đã mã hóa và lưu trữ an toàn toàn bộ <strong>{answeredCount}/{exam.questions.length}</strong> câu trả lời của bạn. Theo thiết lập của Ban tổ chức ELABS 2026, điểm số và kết quả chi tiết sẽ được công bố sau khi hoàn tất toàn bộ ca thi.
             </p>
           </div>
         </div>
@@ -101,7 +134,7 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="text-center md:text-left space-y-2">
             <span className="px-3 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200 uppercase">
-              Kết quả • CUỘC THI HỌC THUẬT ELABS LẦN THỨ XIX - NĂM 2026
+              {canShowScore ? 'Kết quả' : 'Xác nhận nộp bài'} • CUỘC THI HỌC THUẬT ELABS LẦN THỨ XIX - NĂM 2026
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
               {exam.title}
@@ -111,56 +144,93 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
             </p>
           </div>
 
-          {/* Score Badge */}
-          <div className={`flex flex-col items-center justify-center p-5 text-white rounded-2xl shadow-lg min-w-48 text-center shrink-0 ${
-            attempt.isDisqualified
-              ? 'bg-gradient-to-br from-red-600 to-rose-700 shadow-red-500/20'
-              : 'bg-gradient-to-br from-blue-600 to-indigo-700 shadow-blue-500/20'
-          }`}>
-            <span className="text-xs font-semibold uppercase tracking-wider text-white/80">
-              {attempt.isDisqualified ? 'Trạng thái bài thi' : 'Điểm số đạt được'}
-            </span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-4xl md:text-5xl font-black tracking-tight">
-                {attempt.isDisqualified ? '0.0' : score}
+          {/* Score or Status Badge */}
+          {canShowScore ? (
+            <div className={`flex flex-col items-center justify-center p-5 text-white rounded-2xl shadow-lg min-w-48 text-center shrink-0 ${
+              attempt.isDisqualified
+                ? 'bg-gradient-to-br from-red-600 to-rose-700 shadow-red-500/20'
+                : 'bg-gradient-to-br from-blue-600 to-indigo-700 shadow-blue-500/20'
+            }`}>
+              <span className="text-xs font-semibold uppercase tracking-wider text-white/80">
+                {attempt.isDisqualified ? 'Trạng thái bài thi' : 'Điểm số đạt được'}
               </span>
-              <span className="text-base text-white/80 font-bold">/{exam.totalPoints}đ</span>
+              <div className="flex items-baseline gap-1 mt-1">
+                <span className="text-4xl md:text-5xl font-black tracking-tight">
+                  {attempt.isDisqualified ? '0.0' : score}
+                </span>
+                <span className="text-base text-white/80 font-bold">/{exam.totalPoints}đ</span>
+              </div>
+              {attempt.isDisqualified ? (
+                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full text-white">
+                  Đình chỉ thi
+                </span>
+              ) : attempt.status === 'timed_out' ? (
+                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-amber-400 text-slate-900 rounded-full flex items-center gap-1 shadow-xs">
+                  <Clock className="w-3 h-3 text-slate-900" />
+                  <span>Hết giờ làm bài</span>
+                </span>
+              ) : isHighPerformer ? (
+                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>Xuất sắc</span>
+                </span>
+              ) : null}
             </div>
-            {attempt.isDisqualified ? (
-              <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full text-white">
-                Đình chỉ thi
+          ) : (
+            <div className={`flex flex-col items-center justify-center p-5 text-white rounded-2xl shadow-lg min-w-52 text-center shrink-0 ${
+              attempt.isDisqualified
+                ? 'bg-gradient-to-br from-red-600 to-rose-700 shadow-red-500/20'
+                : 'bg-gradient-to-br from-emerald-600 to-teal-700 shadow-emerald-500/20'
+            }`}>
+              <span className="text-xs font-semibold uppercase tracking-wider text-white/85">
+                Trạng thái bài thi
               </span>
-            ) : attempt.status === 'timed_out' ? (
-              <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-amber-400 text-slate-900 rounded-full flex items-center gap-1 shadow-xs">
-                <Clock className="w-3 h-3 text-slate-900" />
-                <span>Hết giờ làm bài</span>
+              <div className="flex items-center justify-center gap-2 mt-2 mb-1">
+                {attempt.isDisqualified ? (
+                  <ShieldAlert className="w-7 h-7 text-amber-300 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-7 h-7 text-emerald-200 shrink-0" />
+                )}
+                <span className="text-2xl font-black tracking-tight">
+                  {attempt.isDisqualified ? 'Đình chỉ' : 'Đã nộp bài'}
+                </span>
+              </div>
+              <span className="text-[11px] text-white/95 font-medium px-2.5 py-0.5 bg-white/20 rounded-full mt-1">
+                {attempt.isDisqualified ? 'Vi phạm quy chế' : 'Chờ BTC công bố điểm'}
               </span>
-            ) : isHighPerformer ? (
-              <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-300" />
-                <span>Xuất sắc</span>
-              </span>
-            ) : null}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Stats Grid */}
         <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <div>
-              <div className="text-xs text-slate-500">
-                {attempt.tieBreakerTotalQuestions && attempt.tieBreakerTotalQuestions > 0
-                  ? 'Câu chính / Câu phụ đúng'
-                  : 'Số câu đúng'}
-              </div>
-              <div className="text-sm font-bold text-slate-900">
-                {attempt.tieBreakerTotalQuestions && attempt.tieBreakerTotalQuestions > 0
-                  ? `${attempt.mainCorrectCount ?? 0}/${attempt.mainTotalQuestions ?? 0} chính • ${attempt.tieBreakerCorrectCount ?? 0}/${attempt.tieBreakerTotalQuestions} phụ`
-                  : `${attempt.correctCount} / ${exam.questions.length} câu`}
+          {canShowScore ? (
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <div className="text-xs text-slate-500">
+                  {attempt.tieBreakerTotalQuestions && attempt.tieBreakerTotalQuestions > 0
+                    ? 'Câu chính / Câu phụ đúng'
+                    : 'Số câu đúng'}
+                </div>
+                <div className="text-sm font-bold text-slate-900">
+                  {attempt.tieBreakerTotalQuestions && attempt.tieBreakerTotalQuestions > 0
+                    ? `${attempt.mainCorrectCount ?? 0}/${attempt.mainTotalQuestions ?? 0} chính • ${attempt.tieBreakerCorrectCount ?? 0}/${attempt.tieBreakerTotalQuestions} phụ`
+                    : `${attempt.correctCount} / ${exam.questions.length} câu`}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
+              <FileCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <div className="text-xs text-slate-500">Tiến trình đã làm</div>
+                <div className="text-sm font-bold text-slate-900">
+                  {answeredCount} / {exam.questions.length} câu
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
             <Clock className="w-5 h-5 text-blue-600 shrink-0" />
@@ -172,15 +242,27 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
-            <Award className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <div className="text-xs text-slate-500">Tỉ lệ chính xác</div>
-              <div className="text-sm font-bold text-slate-900">
-                {Math.round(((attempt.correctCount || 0) / exam.questions.length) * 100)}%
+          {canShowScore ? (
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
+              <Award className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <div className="text-xs text-slate-500">Tỉ lệ chính xác</div>
+                <div className="text-sm font-bold text-slate-900">
+                  {Math.round(((attempt.correctCount || 0) / exam.questions.length) * 100)}%
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
+              <Lock className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <div className="text-xs text-slate-500">Công bố kết quả</div>
+                <div className="text-sm font-bold text-amber-700">
+                  Chờ BTC công bố
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center gap-3">
             <ShieldAlert className={`w-5 h-5 shrink-0 ${attempt.tabSwitchCount > 0 ? 'text-red-500' : 'text-slate-400'}`} />
@@ -203,18 +285,25 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
             <span>Về danh sách đề thi</span>
           </button>
 
-          <button
-            onClick={onRetake}
-            className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>Làm lại bài thi</span>
-          </button>
+          {canRetake ? (
+            <button
+              onClick={onRetake}
+              className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Làm lại bài thi</span>
+            </button>
+          ) : (
+            <div className="px-3.5 py-2 text-xs font-semibold text-slate-500 bg-slate-100 rounded-xl border border-slate-200 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <span>Đã hoàn thành {maxAttempts} lượt thi quy định</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Solutions & Explanations (Chi tiết đáp án & Lời giải) */}
-      {exam.settings.showExplanations && (
+      {canShowScore && exam.settings.showExplanations && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
@@ -377,6 +466,23 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* When score/solutions are hidden */}
+      {!canShowScore && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 mx-auto flex items-center justify-center">
+            <Lock className="w-6 h-6 text-slate-500" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-base font-bold text-slate-900">
+              Đáp án và lời giải chi tiết chưa được mở
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed font-medium">
+              Đề thi đang được thiết lập chế độ bảo mật kết quả. Thí sinh sẽ không xem được câu đúng/sai và lời giải cho đến khi Ban tổ chức ELABS 2026 chính thức mở công bố đáp án.
+            </p>
           </div>
         </div>
       )}
