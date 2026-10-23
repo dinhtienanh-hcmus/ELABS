@@ -166,6 +166,20 @@ export interface ExamSettings {
   maxAttempts?: number; // Giới hạn số lượt thi mỗi thí sinh (1 = chỉ thi 1 lần duy nhất, 2 = tối đa 2 lần, 0 = không giới hạn)
 }
 
+export const DEFAULT_EXAM_SETTINGS: ExamSettings = {
+  shuffleQuestions: true,
+  shuffleOptions: true,
+  requireFullscreen: false,
+  strictFullscreenLock: false,
+  trackTabSwitch: true,
+  maxTabSwitches: 3,
+  autoSubmitOnMaxViolations: false,
+  showResultImmediately: true,
+  showExplanations: true,
+  allowReviewAnswers: true,
+  maxAttempts: 1
+};
+
 export interface Exam {
   id: string;
   code: string; // e.g. "AZ-8921"

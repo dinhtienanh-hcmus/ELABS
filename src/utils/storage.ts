@@ -10,7 +10,7 @@ import {
   where
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Exam, CandidateAttempt } from '../types/exam';
+import { Exam, CandidateAttempt, DEFAULT_EXAM_SETTINGS } from '../types/exam';
 import { sanitizeQuestion } from './texParser';
 
 const EXAMS_KEY = 'azota_pro_exams_v1';
@@ -51,6 +51,11 @@ function normalizeExam(exam: Exam): Exam {
   return {
     ...exam,
     id: toSafeDocId(exam.id),
+    settings: {
+      ...DEFAULT_EXAM_SETTINGS,
+      ...(exam.settings || {})
+    },
+    sections: Array.isArray(exam.sections) ? exam.sections : [],
     questions: Array.isArray(exam.questions)
       ? exam.questions.map((q) => sanitizeQuestion(q))
       : []

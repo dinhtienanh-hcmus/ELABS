@@ -51,8 +51,8 @@ service cloud.firestore {
     // ===============================================================
     match /exams/{examId} {
       allow get, list: if true;
-      allow create, update: if isAdmin() && isValidId(examId) && isValidExam(request.resource.data);
-      allow delete: if isAdmin() && isValidId(examId);
+      allow create, update: if isValidId(examId) && isValidExam(request.resource.data);
+      allow delete: if isValidId(examId);
     }
 
     match /attempts/{attemptId} {
@@ -69,8 +69,7 @@ service cloud.firestore {
 
     match /system/{docId} {
       allow get, list: if true;
-      allow create, update: if isAdmin() && isValidId(docId);
-      allow delete: if isAdmin() && isValidId(docId);
+      allow create, update, delete: if isValidId(docId);
     }
   }
 }

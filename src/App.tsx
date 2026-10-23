@@ -27,7 +27,6 @@ import { BtcExamEditor } from './components/Btc/BtcExamEditor';
 import { BtcLiveMonitor } from './components/Btc/BtcLiveMonitor';
 import { BtcSubmissionsView } from './components/Btc/BtcSubmissionsView';
 import { BtcLoginModal } from './components/Btc/BtcLoginModal';
-import { auth, signOut, onAuthStateChanged, isUserAdmin } from './firebase';
 
 export default function App() {
   // Global Data State
@@ -38,24 +37,21 @@ export default function App() {
 
   // App Navigation & Session State
   const [currentTab, setCurrentTab] = useState<'candidate' | 'btc'>('candidate');
-  const [isBtcLoggedIn, setIsBtcLoggedIn] = useState<boolean>(false);
+  const [isBtcLoggedIn, setIsBtcLoggedIn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('elabs_btc_logged_in') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [showBtcLoginModal, setShowBtcLoginModal] = useState<boolean>(false);
 
-  // Sync auth state with BTC session
-  useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (user) => {
-      if (isUserAdmin(user)) {
-        setIsBtcLoggedIn(true);
-      }
-    });
-    return () => unsubAuth();
-  }, []);
-
-  const handleBtcLogout = async () => {
+  const handleBtcLogout = () => {
     try {
-      await signOut(auth);
-    } catch (e) {
-      console.error('Logout error:', e);
+      localStorage.removeItem('elabs_btc_logged_in');
+      localStorage.removeItem('elabs_btc_user_email');
+    } catch {
+      // ignore
     }
     setIsBtcLoggedIn(false);
     setCurrentTab('candidate');

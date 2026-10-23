@@ -1222,6 +1222,36 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
         </div>
       </div>
 
+      {/* Quick Title & Code Customizer Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+              Tên đề thi hiển thị cho thí sinh <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Nhập tên đề thi (ví dụ: Vòng Sơ loại - Bảng A - ELABS 2026)..."
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            />
+          </div>
+          <div className="w-full md:w-56">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+              Mã phòng thi
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="AZ-2026"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold text-blue-700 uppercase focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 text-sm font-semibold overflow-x-auto">
         <button

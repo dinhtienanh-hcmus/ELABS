@@ -7,7 +7,6 @@ import {
   BookOpen,
   ShieldCheck
 } from 'lucide-react';
-import { auth, isUserAdmin } from '../firebase';
 
 interface NavbarProps {
   currentTab: 'candidate' | 'btc';
@@ -24,8 +23,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenBtcLogin,
   onBtcLogout
 }) => {
-  const currentUser = auth.currentUser;
-  const isCloudAdmin = isUserAdmin(currentUser);
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200">
@@ -86,26 +83,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-2">
           {isBtcLoggedIn ? (
             <div className="flex items-center gap-2">
-              {currentUser?.email ? (
-                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[11px] font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate max-w-[150px]">{currentUser.email}</span>
-                  {isCloudAdmin && (
-                    <span className="px-1 py-0.2 rounded bg-emerald-200 text-emerald-900 text-[9px]">
-                      Admin Cloud
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={onOpenBtcLogin}
-                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-bold transition-colors cursor-pointer"
-                  title="Đăng nhập Google để đồng bộ và lưu đề an toàn lên Firestore"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Xác thực Google Cloud</span>
-                </button>
-              )}
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[11px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Ban Tổ Chức ELABS</span>
+              </div>
 
               <button
                 onClick={() => onSelectTab('btc')}

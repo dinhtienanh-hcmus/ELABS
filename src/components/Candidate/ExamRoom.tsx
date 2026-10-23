@@ -129,7 +129,7 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
   const [violationGraceSeconds, setViolationGraceSeconds] = useState<number>(15);
   const violationTimerRef = useRef<any>(null);
 
-  const maxAllowedViolations = exam.settings.maxTabSwitches || 3;
+  const maxAllowedViolations = exam.settings?.maxTabSwitches || 3;
 
   // View mode: 'all' (scrolling all questions) vs 'single' (one question at a time)
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all');
@@ -184,12 +184,12 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       const secA = sectionOrder.get(a.sectionId!) ?? 0;
       const secB = sectionOrder.get(b.sectionId!) ?? 0;
       if (secA !== secB) return secA - secB;
-      if (exam.settings.shuffleQuestions) {
+      if (exam.settings?.shuffleQuestions) {
         return a.id.localeCompare(b.id);
       }
       return a.number - b.number;
     });
-  }, [exam.questions, exam.sections, exam.settings.shuffleQuestions, effectiveSections]);
+  }, [exam.questions, exam.sections, exam.settings?.shuffleQuestions, effectiveSections]);
 
   const currentSection = effectiveSections[activeSectionIndex] || effectiveSections[0];
 
@@ -465,7 +465,7 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       setTabSwitchCount((prev) => {
         const next = prev + 1;
         // Check if exceeded max allowed violations
-        if (exam.settings.autoSubmitOnMaxViolations && next > maxAllowedViolations) {
+        if (exam.settings?.autoSubmitOnMaxViolations && next > maxAllowedViolations) {
           // Immediately terminate exam due to repeated violations
           setTimeout(() => {
             triggerAutoSubmit(
@@ -550,7 +550,7 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
         violationTimerRef.current = null;
       }
     };
-  }, [hasStartedFullscreen, maxAllowedViolations, exam.settings.autoSubmitOnMaxViolations, triggerAutoSubmit]);
+  }, [hasStartedFullscreen, maxAllowedViolations, exam.settings?.autoSubmitOnMaxViolations, triggerAutoSubmit]);
 
   // Disable right click, copy/cut, and inspection shortcuts
   useEffect(() => {

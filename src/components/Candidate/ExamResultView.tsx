@@ -35,7 +35,7 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
   const [lightboxImage, setLightboxImage] = useState<{ src: string; caption?: string } | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'wrong' | 'correct'>('all');
 
-  const canShowScore = exam.settings.showResultImmediately !== false;
+  const canShowScore = exam.settings?.showResultImmediately !== false;
   const score = attempt.score ?? 0;
   const isHighPerformer = canShowScore && score >= 8.0;
 
@@ -56,7 +56,7 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
   const minutesSpent = Math.floor(attempt.timeSpentSeconds / 60);
   const secondsSpent = attempt.timeSpentSeconds % 60;
   const answeredCount = Object.keys(attempt.answers || {}).length;
-  const maxAttempts = exam.settings.maxAttempts ?? 1;
+  const maxAttempts = exam.settings?.maxAttempts ?? 1;
   const canRetake = maxAttempts === 0 || maxAttempts > 1;
 
   const filteredQuestions = exam.questions.filter((q) => {
@@ -303,7 +303,7 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
       </div>
 
       {/* Solutions & Explanations (Chi tiết đáp án & Lời giải) */}
-      {canShowScore && exam.settings.showExplanations && (
+      {canShowScore && exam.settings?.showExplanations && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>

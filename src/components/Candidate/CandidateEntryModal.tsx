@@ -41,7 +41,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
     });
   }, [attempts, exam.id, candidateCodeInput, fullNameInput]);
 
-  const maxAttempts = exam.settings.maxAttempts ?? 1;
+  const maxAttempts = exam.settings?.maxAttempts ?? 1;
   const isAttemptLimitReached = maxAttempts > 0 && candidatePreviousAttempts.length >= maxAttempts;
 
   if (!isOpen) return null;
@@ -143,7 +143,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
   };
 
   const ruleNote =
-    exam.settings.entryRuleNote?.trim() ||
+    exam.settings?.entryRuleNote?.trim() ||
     'Cố định toàn màn hình (Full-screen Locked). Nghiêm cấm thoát màn hình, chuyển tab hoặc tra cứu tài liệu bên ngoài. Mọi vi phạm sẽ kích hoạt khóa bài và gửi báo cáo về Ban Tổ Chức.';
 
   return (
@@ -207,7 +207,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-bold text-slate-800">Thông tin thí sinh dự thi</h3>
-            {exam.settings.allowDemoFill && !isAttemptLimitReached && (
+            {exam.settings?.allowDemoFill && !isAttemptLimitReached && (
               <button
                 type="button"
                 onClick={handleFillDemo}
@@ -229,9 +229,9 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
                 Thí sinh <strong>{candidateCodeInput.toUpperCase() || fullNameInput}</strong> đã hoàn thành bài thi cho đề thi này ({candidatePreviousAttempts.length} lần nộp bài).
               </p>
               <div className="bg-white/80 p-2.5 rounded-xl border border-red-200 flex items-center justify-between text-xs font-semibold">
-                <span>{exam.settings.showResultImmediately !== false ? 'Điểm số cao nhất đã đạt:' : 'Trạng thái bài làm:'}</span>
+                <span>{exam.settings?.showResultImmediately !== false ? 'Điểm số cao nhất đã đạt:' : 'Trạng thái bài làm:'}</span>
                 <span className="text-blue-700 font-bold text-sm">
-                  {exam.settings.showResultImmediately !== false
+                  {exam.settings?.showResultImmediately !== false
                     ? `${Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ`
                     : 'Đã lưu an toàn (Chờ BTC công bố)'}
                 </span>
@@ -248,7 +248,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
               <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
                 Bạn đã thi <strong>{candidatePreviousAttempts.length}/{maxAttempts} lượt</strong>.
-                {exam.settings.showResultImmediately !== false ? (
+                {exam.settings?.showResultImmediately !== false ? (
                   <> Điểm số cao nhất hiện tại: <strong>{Math.max(...candidatePreviousAttempts.map((a) => a.score ?? 0)).toFixed(2)}đ</strong>.</>
                 ) : (
                   <> Điểm số sẽ được BTC công bố sau theo kế hoạch.</>
