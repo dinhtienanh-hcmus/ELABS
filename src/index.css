@@ -51,25 +51,11 @@ code, kbd, samp, pre, textarea, input, .font-mono {
   padding: 0.25em 0;
 }
 
-/* Ensure KaTeX overline (A đảo, B đảo: \overline{A}, \overline{B}) is always clearly visible */
-.katex .overline-line {
+/* Ensure KaTeX overline has clean solid stroke without disturbing vertical strut alignment */
+.katex .katex-overline .overline-line {
   border-bottom-style: solid !important;
-  border-bottom-width: max(1.8px, 0.08em) !important;
+  border-bottom-width: max(1.2px, 0.05em) !important;
   border-bottom-color: currentColor !important;
-  display: block !important;
-  min-height: 1.5px !important;
-  opacity: 1 !important;
 }
 
-.katex .underline-line {
-  border-bottom-style: solid !important;
-  border-bottom-width: max(1.8px, 0.08em) !important;
-  border-bottom-color: currentColor !important;
-  display: block !important;
-  min-height: 1.5px !important;
-}
-
-.katex .katex-overline {
-  padding-top: 2px !important;
-}
 
