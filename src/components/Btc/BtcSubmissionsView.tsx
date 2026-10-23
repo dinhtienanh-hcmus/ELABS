@@ -19,7 +19,7 @@ interface BtcSubmissionsViewProps {
   exam: Exam;
   allExams?: Exam[];
   attempts: CandidateAttempt[];
-  onClearExamAttempts?: () => void;
+  onClearExamAttempts?: (targetId?: string) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -51,6 +51,31 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
   const [mergeAllExams, setMergeAllExams] = useState<boolean>(false);
   const [inspectAttempt, setInspectAttempt] = useState<CandidateAttempt | null>(null);
   const [inspectTeam, setInspectTeam] = useState<AggregatedTeamRow | null>(null);
+
+  // Clear scoreboard state
+  const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
+  const [clearTarget, setClearTarget] = useState<'current' | 'all'>('current');
+  const [clearSuccessMsg, setClearSuccessMsg] = useState<string | null>(null);
+
+  const handleExecuteClear = async () => {
+    if (!onClearExamAttempts) return;
+    setIsClearing(true);
+    try {
+      await onClearExamAttempts(clearTarget === 'all' ? 'all' : exam.id);
+      setShowClearConfirm(false);
+      setClearSuccessMsg(
+        clearTarget === 'all'
+          ? 'Đã xóa toàn bộ bài nộp của tất cả đề thi thành công!'
+          : `Đã xóa toàn bộ bài nộp của đề thi ${exam.title}!`
+      );
+      setTimeout(() => setClearSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Lỗi khi xóa bảng điểm:', err);
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const enabledCandidateFields = useMemo(() => {
     return getExamCandidateFields(exam).filter((f) => f.enabled);
@@ -398,9 +423,9 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
           {onClearExamAttempts && examAttempts.length > 0 && (
             <button
               type="button"
-              onClick={onClearExamAttempts}
+              onClick={() => setShowClearConfirm(true)}
               className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Xóa toàn bộ bài nộp của đề thi này"
+              title="Xóa toàn bộ bài nộp của bảng điểm này"
             >
               <Trash2 className="w-4 h-4" />
               <span>Xóa bảng điểm</span>
@@ -427,6 +452,23 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Clear Success Alert */}
+      {clearSuccessMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-800 font-bold animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{clearSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setClearSuccessMsg(null)}
+            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Mode Switcher: Team Merged Leaderboard vs Individual Leaderboard */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-indigo-50/60 border border-indigo-200/80 p-3.5 rounded-2xl">
@@ -742,7 +784,17 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
                         </td>
                       )}
                       <td className="py-3 px-3 font-mono text-slate-500">
-                        {mins}p {secs}s
+                        <div>{mins}p {secs}s</div>
+                        {att.status === 'timed_out' && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700 font-bold border border-amber-200 mt-0.5">
+                            Hết giờ
+                          </span>
+                        )}
+                        {att.isDisqualified && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-red-50 text-red-700 font-bold border border-red-200 mt-0.5">
+                            Đình chỉ
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-3">
                         {att.tabSwitchCount > 0 ? (
@@ -1028,6 +1080,89 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
                 </ul>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Clear Scoreboard Modal */}
+      {showClearConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Xác nhận xóa bảng điểm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác nhận xóa bảng điểm</h3>
+                <p className="text-xs text-slate-500">Xóa vĩnh viễn kết quả làm bài của thí sinh</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-red-50/70 border border-red-200 rounded-2xl space-y-2 text-xs text-red-800">
+              <p className="font-bold">⚠️ Cảnh báo thao tác quan trọng:</p>
+              <p>
+                Thao tác này sẽ xóa toàn bộ <strong>{examAttempts.length} bài nộp</strong> khỏi hệ thống đám mây Firestore và bộ nhớ cục bộ. Sau khi xóa, điểm số và bài làm của thí sinh sẽ không thể phục hồi.
+              </p>
+              {mergeAllExams && (
+                <div className="pt-2 border-t border-red-200 space-y-1.5">
+                  <span className="font-bold block text-slate-800">Phạm vi xóa bài nộp:</span>
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="radio"
+                      name="clearTarget"
+                      checked={clearTarget === 'current'}
+                      onChange={() => setClearTarget('current')}
+                      className="accent-red-600"
+                    />
+                    <span>Chỉ xóa bài nộp của đề này ({exam.title})</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="radio"
+                      name="clearTarget"
+                      checked={clearTarget === 'all'}
+                      onChange={() => setClearTarget('all')}
+                      className="accent-red-600"
+                    />
+                    <span>Xóa bài nộp của TẤT CẢ các đề thi</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={handleExecuteClear}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {isClearing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Xác nhận xóa bảng điểm</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

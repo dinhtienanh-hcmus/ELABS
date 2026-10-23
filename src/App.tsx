@@ -155,7 +155,8 @@ export default function App() {
     timeSpentSeconds: number,
     tabSwitchLogs: { timestamp: number; message: string }[],
     isDisqualified: boolean = false,
-    disqualificationReason?: string
+    disqualificationReason?: string,
+    isTimedOut: boolean = false
   ) => {
     if (!activeExamSession) return;
     const { exam, candidateInfo } = activeExamSession;
@@ -169,7 +170,8 @@ export default function App() {
       tabSwitchCount,
       tabSwitchLogs,
       isDisqualified,
-      disqualificationReason
+      disqualificationReason,
+      isTimedOut
     );
 
     saveAttempt(gradedAttempt);
@@ -204,11 +206,12 @@ export default function App() {
     clearExamAttemptsFromCloud(examId, attempts);
   };
 
-  const handleClearExamAttempts = (examId: string) => {
-    const nextAttempts = attempts.filter((a) => a.examId !== examId);
+  const handleClearExamAttempts = async (examId: string) => {
+    const isAll = examId === 'all';
+    const nextAttempts = isAll ? [] : attempts.filter((a) => a.examId !== examId);
     setAttempts(nextAttempts);
     saveAttemptsLocalOnly(nextAttempts);
-    clearExamAttemptsFromCloud(examId, attempts);
+    await clearExamAttemptsFromCloud(examId, attempts);
   };
 
   const handleResetAllData = () => {
@@ -342,7 +345,9 @@ export default function App() {
                   exam={submissionsExam}
                   allExams={exams}
                   attempts={attempts}
-                  onClearExamAttempts={() => handleClearExamAttempts(submissionsExam.id)}
+                  onClearExamAttempts={(targetId?: string) =>
+                    handleClearExamAttempts(targetId || submissionsExam.id)
+                  }
                   onClose={() => setSubmissionsExam(null)}
                 />
               </div>

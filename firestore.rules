@@ -58,7 +58,7 @@ service cloud.firestore {
     match /attempts/{attemptId} {
       allow get, list: if true;
       allow create, update: if isValidId(attemptId) && isValidAttempt(request.resource.data);
-      allow delete: if isAdmin() && isValidId(attemptId);
+      allow delete: if isValidId(attemptId);
     }
 
     match /activeTakers/{sessionId} {

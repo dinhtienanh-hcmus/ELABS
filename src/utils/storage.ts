@@ -5,7 +5,9 @@ import {
   deleteDoc,
   onSnapshot,
   getDocs,
-  writeBatch
+  writeBatch,
+  query,
+  where
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Exam, CandidateAttempt } from '../types/exam';
@@ -198,22 +200,70 @@ export function saveAttempt(attempt: CandidateAttempt): void {
 
 export async function clearExamAttemptsFromCloud(
   examId: string,
-  currentAttempts: CandidateAttempt[]
-): Promise<void> {
+  currentAttempts: CandidateAttempt[] = []
+): Promise<number> {
+  const isAll = examId === 'all';
   const targetExamId = toSafeDocId(examId);
-  const toDelete = currentAttempts.filter(
-    (a) => toSafeDocId(a.examId) === targetExamId
-  );
-  await Promise.all(
-    toDelete.map(async (att) => {
-      const docId = toSafeDocId(att.id);
-      try {
-        await deleteDoc(doc(db, 'attempts', docId));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `attempts/${docId}`);
+
+  // 1. Immediately update localStorage
+  try {
+    const localAttempts = loadAttempts();
+    const remainingLocal = isAll
+      ? []
+      : localAttempts.filter((a) => toSafeDocId(a.examId) !== targetExamId);
+    saveAttemptsLocalOnly(remainingLocal);
+  } catch (e) {
+    console.error('Failed to update local attempts during clear', e);
+  }
+
+  // 2. Query and batch delete matching documents in Firestore
+  try {
+    const attemptsColl = collection(db, 'attempts');
+    const q = isAll
+      ? query(attemptsColl)
+      : query(attemptsColl, where('examId', '==', targetExamId));
+    const snap = await getDocs(q);
+
+    const docIdsToDelete = new Set<string>();
+    snap.forEach((d) => docIdsToDelete.add(d.id));
+
+    // Also include any matching attempts from currentAttempts (handles offline/stale state)
+    currentAttempts.forEach((a) => {
+      if (isAll || toSafeDocId(a.examId) === targetExamId) {
+        docIdsToDelete.add(toSafeDocId(a.id));
       }
-    })
-  );
+    });
+
+    if (docIdsToDelete.size === 0) return 0;
+
+    const ids = Array.from(docIdsToDelete);
+    const BATCH_SIZE = 400;
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const slice = ids.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+      slice.forEach((id) => {
+        batch.delete(doc(db, 'attempts', id));
+      });
+      await batch.commit();
+    }
+    return docIdsToDelete.size;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `attempts/clear_${targetExamId}`);
+    // Fallback: try individual delete
+    let fallbackCount = 0;
+    const toDelete = currentAttempts.filter(
+      (a) => isAll || toSafeDocId(a.examId) === targetExamId
+    );
+    await Promise.all(
+      toDelete.map(async (att) => {
+        try {
+          await deleteDoc(doc(db, 'attempts', toSafeDocId(att.id)));
+          fallbackCount++;
+        } catch {}
+      })
+    );
+    return fallbackCount;
+  }
 }
 
 export function resetAllStorageData(): void {

@@ -11,7 +11,8 @@ export function gradeAttempt(
   tabSwitchCount: number = 0,
   tabSwitchLogs: { timestamp: number; message: string }[] = [],
   isDisqualified: boolean = false,
-  disqualificationReason?: string
+  disqualificationReason?: string,
+  isTimedOut: boolean = false
 ): CandidateAttempt {
   let correctCount = 0;
   let mainCorrectCount = 0;
@@ -87,7 +88,7 @@ export function gradeAttempt(
     mainTotalQuestions,
     tieBreakerCorrectCount,
     tieBreakerTotalQuestions,
-    status: isDisqualified ? 'disqualified' : 'submitted'
+    status: isDisqualified ? 'disqualified' : isTimedOut ? 'timed_out' : 'submitted'
   };
 }
 

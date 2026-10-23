@@ -30,7 +30,8 @@ interface ExamRoomProps {
     timeSpentSeconds: number,
     tabSwitchLogs: { timestamp: number; message: string }[],
     isDisqualified?: boolean,
-    disqualificationReason?: string
+    disqualificationReason?: string,
+    isTimedOut?: boolean
   ) => void;
   onExit: () => void;
 }
@@ -81,6 +82,10 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       const saved = localStorage.getItem(sessionKey);
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (parsed.targetEndTime) {
+          const left = Math.round((parsed.targetEndTime - Date.now()) / 1000);
+          return Math.max(0, left);
+        }
         if (typeof parsed.remainingSeconds === 'number' && parsed.remainingSeconds > 0) {
           return parsed.remainingSeconds;
         }
@@ -90,6 +95,27 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
     }
     return totalSeconds;
   });
+
+  // Keep references fresh to avoid stale closures in timeouts and intervals
+  const answersRef = useRef<Record<string, string>>(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  const remainingSecondsRef = useRef<number>(remainingSeconds);
+  useEffect(() => {
+    remainingSecondsRef.current = remainingSeconds;
+  }, [remainingSeconds]);
+
+  const targetEndTimeRef = useRef<number | null>(null);
+  const isSubmittingRef = useRef<boolean>(false);
+
+  // Auto-submit modal state (for timeout or repeated fullscreen escape)
+  const [autoSubmitting, setAutoSubmitting] = useState<{
+    reason: 'timeout' | 'violation';
+    title: string;
+    message: string;
+  } | null>(null);
 
   // STRICT FULLSCREEN LOCK & ANTI-CHEAT STATES
   // 1. Has candidate entered initial fullscreen?
@@ -117,6 +143,13 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
 
   // Submit confirmation modal
   const [showConfirmSubmit, setShowConfirmSubmit] = useState<boolean>(false);
+  const isConfirmingSubmitRef = useRef<boolean>(false);
+  const isGracePeriodRef = useRef<boolean>(false);
+  const lastViolationTimestampRef = useRef<number>(0);
+
+  useEffect(() => {
+    isConfirmingSubmitRef.current = showConfirmSubmit;
+  }, [showConfirmSubmit]);
 
   // Session ID for live monitoring
   const sessionIdRef = useRef<string>(`elabs_session_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`);
@@ -172,13 +205,16 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
 
   // Persist state to localStorage on every change (0ms local-first backup)
   useEffect(() => {
+    if (isSubmittingRef.current) return;
     try {
       localStorage.setItem(
         sessionKey,
         JSON.stringify({
           answers,
           marked: Array.from(markedForReview),
-          remainingSeconds
+          remainingSeconds,
+          targetEndTime: targetEndTimeRef.current || (Date.now() + remainingSeconds * 1000),
+          updatedAt: Date.now()
         })
       );
     } catch {
@@ -237,44 +273,142 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
     }
   }, [tabSwitchCount, sendHeartbeatPing]);
 
-  // Handle final submission (normal or disqualified)
-  const handleFinalSubmit = useCallback(
-    (isDisqualified: boolean = false, disqualificationReason?: string) => {
-      const timeSpent = Math.max(1, totalSeconds - remainingSeconds);
+  // Automatic submission when time expires or violation limit exceeded
+  const triggerAutoSubmit = useCallback(
+    (reason: 'timeout' | 'violation', customReason?: string) => {
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
+
+      const isDisqualified = reason === 'violation';
+      const isTimedOut = reason === 'timeout';
+
+      setAutoSubmitting({
+        reason,
+        title: isTimedOut ? 'HẾT THỜI GIAN LÀM BÀI!' : 'BÀI THI BỊ ĐÌNH CHỈ!',
+        message: isTimedOut
+          ? `Thời gian làm bài (${exam.durationMinutes} phút) đã kết thúc. Hệ thống đang tự động lưu câu trả lời và nộp bài thi theo tiến trình của bạn...`
+          : (customReason || 'Vi phạm cố định toàn màn hình quá số lần quy định.')
+      });
+
+      if (violationTimerRef.current) {
+        clearInterval(violationTimerRef.current);
+        violationTimerRef.current = null;
+      }
+
       try {
         localStorage.removeItem(sessionKey);
       } catch {
         // ignore
       }
       removeActiveTaker(sessionIdRef.current);
+
+      // Snapshot clean violation logs before exitFullscreen
+      const cleanLogs = [...tabSwitchLogsRef.current];
+
+      // Brief delay to allow student to see the automatic submission notification & snapshot
+      setTimeout(() => {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+        const finalAnswers = { ...answersRef.current };
+        const timeSpent = isTimedOut ? totalSeconds : Math.max(1, totalSeconds - remainingSecondsRef.current);
+        onSubmitExam(
+          finalAnswers,
+          timeSpent,
+          cleanLogs,
+          isDisqualified,
+          customReason,
+          isTimedOut
+        );
+      }, 1400);
+    },
+    [exam.durationMinutes, totalSeconds, sessionKey, onSubmitExam]
+  );
+
+  // Manual final submission (candidate clicks 'Nộp bài')
+  const handleFinalSubmit = useCallback(
+    (isDisqualified: boolean = false, disqualificationReason?: string) => {
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
+
+      if (violationTimerRef.current) {
+        clearInterval(violationTimerRef.current);
+        violationTimerRef.current = null;
+      }
+
+      const timeSpent = Math.max(1, totalSeconds - remainingSecondsRef.current);
+      try {
+        localStorage.removeItem(sessionKey);
+      } catch {
+        // ignore
+      }
+      removeActiveTaker(sessionIdRef.current);
+
+      // Snapshot clean violation logs before exitFullscreen to prevent false submit-time strikes
+      const cleanLogs = [...tabSwitchLogsRef.current];
+
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       }
-      onSubmitExam(answers, timeSpent, tabSwitchLogsRef.current, isDisqualified, disqualificationReason);
+      onSubmitExam(
+        answersRef.current,
+        timeSpent,
+        cleanLogs,
+        isDisqualified,
+        disqualificationReason,
+        false
+      );
     },
-    [answers, remainingSeconds, totalSeconds, sessionKey, onSubmitExam]
+    [totalSeconds, sessionKey, onSubmitExam]
   );
 
-  // Timer countdown
+  // Check on mount if session had already timed out while candidate was away
   useEffect(() => {
-    if (!hasStartedFullscreen) return; // Do not decrement until student activates exam
+    try {
+      const saved = localStorage.getItem(sessionKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.targetEndTime && Date.now() >= parsed.targetEndTime) {
+          triggerAutoSubmit('timeout');
+        } else if (typeof parsed.remainingSeconds === 'number' && parsed.remainingSeconds <= 0) {
+          triggerAutoSubmit('timeout');
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [sessionKey, triggerAutoSubmit]);
+
+  // Timer countdown: drift-compensated using targetEndTimeRef
+  useEffect(() => {
+    if (!hasStartedFullscreen || isSubmittingRef.current) return;
+
+    if (!targetEndTimeRef.current) {
+      targetEndTimeRef.current = Date.now() + remainingSecondsRef.current * 1000;
+    }
 
     const timer = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleFinalSubmit(false);
-          return 0;
-        }
-        return prev - 1;
-      });
+      if (isSubmittingRef.current) {
+        clearInterval(timer);
+        return;
+      }
+
+      const now = Date.now();
+      const diff = Math.max(0, Math.round((targetEndTimeRef.current! - now) / 1000));
+      setRemainingSeconds(diff);
+
+      if (diff <= 0) {
+        clearInterval(timer);
+        triggerAutoSubmit('timeout');
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [hasStartedFullscreen, handleFinalSubmit]);
+  }, [hasStartedFullscreen, triggerAutoSubmit]);
 
   // Request & enter Fullscreen lock
   const activateFullscreen = async () => {
+    isGracePeriodRef.current = true;
     try {
       const elem = document.documentElement;
       if (elem.requestFullscreen) {
@@ -291,57 +425,51 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
         clearInterval(violationTimerRef.current);
         violationTimerRef.current = null;
       }
+      setTimeout(() => {
+        isGracePeriodRef.current = false;
+      }, 2500);
     } catch (e) {
       console.warn('Fullscreen request failed or was dismissed', e);
       // Fallback allowed for environments that block raw requestFullscreen
       setHasStartedFullscreen(true);
       setIsFullscreenActive(true);
+      setTimeout(() => {
+        isGracePeriodRef.current = false;
+      }, 2500);
     }
   };
 
-  // FULLSCREEN & TAB ESCAPE DETECTION ENGINE
+  // FULLSCREEN & TAB ESCAPE DETECTION ENGINE (RETHOUGHT FOR ZERO FALSE POSITIVES)
   useEffect(() => {
-    const checkFullscreenState = () => {
-      const isCurrentlyFull = Boolean(
-        document.fullscreenElement ||
-          (document as any).webkitFullscreenElement ||
-          (document as any).mozFullScreenElement ||
-          (document as any).msFullscreenElement
-      );
-
-      setIsFullscreenActive(isCurrentlyFull);
-
-      // If exam already started, but user exited fullscreen
-      if (hasStartedFullscreen && !isCurrentlyFull) {
-        handleViolation('Thoát chế độ toàn màn hình (Exit Full-Screen)');
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden && hasStartedFullscreen) {
-        handleViolation('Chuyển tab hoặc ẩn cửa sổ bài thi (Tab switch / App blur)');
-      }
-    };
-
-    const handleWindowBlur = () => {
-      if (hasStartedFullscreen && !document.hidden) {
-        handleViolation('Mất tiêu điểm màn hình thi (Chuyển sang ứng dụng khác)');
-      }
-    };
-
     const handleViolation = (reason: string) => {
-      const timestamp = Date.now();
-      const logMsg = `${reason} lúc ${new Date().toLocaleTimeString('vi-VN')}`;
-      tabSwitchLogsRef.current.push({ timestamp, message: logMsg });
+      // 1. NEVER record violations during submission, confirmation dialog, transition grace period, or before start
+      if (
+        isSubmittingRef.current ||
+        isConfirmingSubmitRef.current ||
+        isGracePeriodRef.current ||
+        !hasStartedFullscreen
+      ) {
+        return;
+      }
+
+      // 2. Cooldown debounce: ignore duplicate events within 3.5 seconds to prevent event storms
+      const now = Date.now();
+      if (now - lastViolationTimestampRef.current < 3500) {
+        return;
+      }
+      lastViolationTimestampRef.current = now;
+
+      const logMsg = `${reason} lúc ${new Date(now).toLocaleTimeString('vi-VN')}`;
+      tabSwitchLogsRef.current.push({ timestamp: now, message: logMsg });
 
       setTabSwitchCount((prev) => {
         const next = prev + 1;
         // Check if exceeded max allowed violations
         if (exam.settings.autoSubmitOnMaxViolations && next > maxAllowedViolations) {
-          // Immediately terminate exam due to cheating / repeated violations
+          // Immediately terminate exam due to repeated violations
           setTimeout(() => {
-            handleFinalSubmit(
-              true,
+            triggerAutoSubmit(
+              'violation',
               `Đình chỉ bài thi: Thí sinh đã vi phạm thoát toàn màn hình ${next} lần, vượt quá giới hạn ${maxAllowedViolations} lần cho phép của Cuộc thi ELABS.`
             );
           }, 300);
@@ -358,8 +486,8 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
               clearInterval(violationTimerRef.current);
               violationTimerRef.current = null;
               // Auto-submit due to failure to return to fullscreen
-              handleFinalSubmit(
-                true,
+              triggerAutoSubmit(
+                'violation',
                 'Đình chỉ bài thi: Quá 15 giây không khôi phục chế độ toàn màn hình theo quy chế thi ELABS.'
               );
               return 0;
@@ -370,12 +498,46 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       }
     };
 
+    const checkFullscreenState = () => {
+      if (isSubmittingRef.current || isConfirmingSubmitRef.current || isGracePeriodRef.current) {
+        return;
+      }
+
+      const isCurrentlyFull = Boolean(
+        document.fullscreenElement ||
+          (document as any).webkitFullscreenElement ||
+          (document as any).mozFullScreenElement ||
+          (document as any).msFullscreenElement
+      );
+
+      setIsFullscreenActive(isCurrentlyFull);
+
+      // If exam already started, but user exited fullscreen
+      if (hasStartedFullscreen && !isCurrentlyFull) {
+        handleViolation('Thoát chế độ toàn màn hình (Exit Full-Screen)');
+      } else if (isCurrentlyFull) {
+        // Clear grace countdown timer when candidate returns to fullscreen
+        if (violationTimerRef.current) {
+          clearInterval(violationTimerRef.current);
+          violationTimerRef.current = null;
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (isSubmittingRef.current || isConfirmingSubmitRef.current || isGracePeriodRef.current) {
+        return;
+      }
+      if (document.hidden && hasStartedFullscreen) {
+        handleViolation('Chuyển tab hoặc thu nhỏ trình duyệt bài thi (Tab switch / Browser minimize)');
+      }
+    };
+
     document.addEventListener('fullscreenchange', checkFullscreenState);
     document.addEventListener('webkitfullscreenchange', checkFullscreenState);
     document.addEventListener('mozfullscreenchange', checkFullscreenState);
     document.addEventListener('MSFullscreenChange', checkFullscreenState);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleWindowBlur);
 
     return () => {
       document.removeEventListener('fullscreenchange', checkFullscreenState);
@@ -383,10 +545,12 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       document.removeEventListener('mozfullscreenchange', checkFullscreenState);
       document.removeEventListener('MSFullscreenChange', checkFullscreenState);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleWindowBlur);
-      if (violationTimerRef.current) clearInterval(violationTimerRef.current);
+      if (violationTimerRef.current) {
+        clearInterval(violationTimerRef.current);
+        violationTimerRef.current = null;
+      }
     };
-  }, [hasStartedFullscreen, maxAllowedViolations, exam.settings.autoSubmitOnMaxViolations, handleFinalSubmit]);
+  }, [hasStartedFullscreen, maxAllowedViolations, exam.settings.autoSubmitOnMaxViolations, triggerAutoSubmit]);
 
   // Disable right click, copy/cut, and inspection shortcuts
   useEffect(() => {
@@ -422,6 +586,7 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
 
   // Option selection handler - 0ms instant UI reaction
   const handleSelectOption = (questionId: string, optionId: string) => {
+    if (isSubmittingRef.current || autoSubmitting) return;
     setAnswers((prev) => {
       const next = { ...prev };
       next[questionId] = optionId;
@@ -567,8 +732,83 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col antialiased selection:bg-blue-100 select-none">
+      {/* 0. AUTO-SUBMISSION ON TIMEOUT / DISQUALIFICATION OVERLAY */}
+      {autoSubmitting && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label={autoSubmitting.title}
+          className="fixed inset-0 z-[100000] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-blue-500/40 text-center space-y-5 animate-in zoom-in-95 duration-200">
+            <div className={`w-16 h-16 mx-auto rounded-3xl flex items-center justify-center shadow-inner ${
+              autoSubmitting.reason === 'timeout'
+                ? 'bg-blue-50 border border-blue-200 text-blue-600'
+                : 'bg-red-50 border border-red-200 text-red-600'
+            }`}>
+              {autoSubmitting.reason === 'timeout' ? (
+                <Clock className="w-8 h-8 animate-pulse text-blue-600" />
+              ) : (
+                <AlertOctagon className="w-8 h-8 animate-bounce text-red-600" />
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider inline-block ${
+                autoSubmitting.reason === 'timeout'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {autoSubmitting.reason === 'timeout' ? 'Hết giờ làm bài' : 'Đình chỉ bài thi'}
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                {autoSubmitting.title}
+              </h2>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                {autoSubmitting.message}
+              </p>
+            </div>
+
+            {/* Candidate Snapshot & Progress */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-left space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Thí sinh:</span>
+                <strong className="text-slate-900 font-bold">{candidateInfo.fullName}</strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">MSSV:</span>
+                <strong className="font-mono text-slate-900">{candidateInfo.candidateCode}</strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Tiến độ câu đã trả lời:</span>
+                <strong className="text-blue-700 font-bold">
+                  {Object.keys(answers).length} / {displayQuestions.length} câu ({Math.round((Object.keys(answers).length / Math.max(1, displayQuestions.length)) * 100)}%)
+                </strong>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Thời gian làm bài:</span>
+                <strong className="text-slate-900 font-mono font-bold">
+                  {autoSubmitting.reason === 'timeout' ? `${exam.durationMinutes} phút (Hết giờ)` : `${Math.floor((totalSeconds - remainingSeconds) / 60)} phút`}
+                </strong>
+              </div>
+            </div>
+
+            {/* Spinner loader indicator */}
+            <div className="space-y-2 pt-1">
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600 rounded-full animate-pulse w-full" />
+              </div>
+              <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
+                <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <span>Đang tự động nộp bài và chuyển tiếp sang trang kết quả...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. STRICT FULLSCREEN ESCAPE BLOCKER OVERLAY (Appears when user exits fullscreen or switches tabs) */}
-      {!isFullscreenActive && (
+      {!isFullscreenActive && !autoSubmitting && !showConfirmSubmit && (
         <div
           role="alertdialog"
           aria-modal="true"
@@ -612,14 +852,27 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
               ⚠️ Nếu không khôi phục Toàn màn hình trong <strong>{violationGraceSeconds} giây</strong> hoặc vi phạm quá <strong>{maxAllowedViolations} lần</strong>, bài thi sẽ bị <strong>ĐÌNH CHỈ VÀ NỘP BÀI CƯỠNG CHẾ</strong> với lý do gian lận!
             </p>
 
-            <button
-              type="button"
-              onClick={activateFullscreen}
-              className="w-full py-3.5 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-extrabold text-sm rounded-xl shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Maximize2 className="w-4 h-4" />
-              <span>KHÔI PHỤC TOÀN MÀN HÌNH NGAY</span>
-            </button>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={activateFullscreen}
+                className="w-full py-3.5 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-extrabold text-sm rounded-xl shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Maximize2 className="w-4 h-4" />
+                <span>KHÔI PHỤC TOÀN MÀN HÌNH ĐỂ TIẾP TỤC LÀM BÀI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmSubmit(true);
+                }}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Tôi đã làm xong bài thi • Tiến hành nộp bài ngay</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

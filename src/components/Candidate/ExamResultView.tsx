@@ -78,6 +78,24 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
         </div>
       )}
 
+      {/* Auto-submitted on Timeout Banner */}
+      {attempt.status === 'timed_out' && (
+        <div className="p-5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-3xl shadow-lg flex items-start gap-4">
+          <Clock className="w-8 h-8 shrink-0 text-amber-100 mt-0.5" />
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-bold uppercase tracking-wide">
+              <span>Nộp bài tự động khi hết giờ</span>
+            </div>
+            <h2 className="text-base sm:text-lg font-bold">
+              Bài thi đã được tự động nộp do hết thời gian làm bài ({exam.durationMinutes} phút)
+            </h2>
+            <p className="text-xs text-amber-50 leading-relaxed font-medium">
+              Hệ thống đã tự động thu bài và bảo lưu toàn bộ câu trả lời bạn đã chọn. Kết quả và điểm số bên dưới đã được tính toán đầy đủ và chính xác dựa trên tiến trình bạn đã làm.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner & Score Card */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -112,8 +130,13 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
               <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full text-white">
                 Đình chỉ thi
               </span>
+            ) : attempt.status === 'timed_out' ? (
+              <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-amber-400 text-slate-900 rounded-full flex items-center gap-1 shadow-xs">
+                <Clock className="w-3 h-3 text-slate-900" />
+                <span>Hết giờ làm bài</span>
+              </span>
             ) : isHighPerformer ? (
-              <span className="mt-2 text-[11px] font-bold px-2 py-0.5 bg-white/20 rounded-full flex items-center gap-1">
+              <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-amber-300" />
                 <span>Xuất sắc</span>
               </span>
