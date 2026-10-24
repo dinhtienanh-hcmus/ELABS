@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CandidateAttempt, Exam } from '../../types/exam';
 import { MathView } from '../MathView';
 import { ImageLightbox } from '../ImageLightbox';
+import { OfficialLogos } from '../OfficialLogos';
 import confetti from 'canvas-confetti';
 import {
   Award,
@@ -130,17 +131,27 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
       )}
 
       {/* Top Banner & Score Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm">
+      <div className="bg-white rounded-3xl border border-amber-200/80 p-6 md:p-8 shadow-sm">
+        {/* 4 Official Logos: Khoa -> Đoàn -> Hội -> ELABS */}
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-amber-100 flex-wrap gap-3">
+          <div className="px-3 py-1 bg-amber-50 rounded-2xl border border-amber-200/80">
+            <OfficialLogos size="sm" />
+          </div>
+          <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+            Khoa ĐT-VT • Trường ĐH Khoa học tự nhiên, ĐHQG-HCM
+          </span>
+        </div>
+
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="text-center md:text-left space-y-2">
-            <span className="px-3 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+            <span className="px-3 py-1 text-xs font-bold rounded-full bg-amber-50 text-amber-900 border border-amber-200 uppercase">
               {canShowScore ? 'Kết quả' : 'Xác nhận nộp bài'} • CUỘC THI HỌC THUẬT ELABS LẦN THỨ XIX - NĂM 2026
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
               {exam.title}
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Thí sinh: <strong className="text-slate-800">{attempt.candidateInfo.fullName}</strong> • MSSV: <strong className="font-mono text-slate-800">{attempt.candidateInfo.candidateCode}</strong> • Lớp: {attempt.candidateInfo.className}
+              Thí sinh: <strong className="text-orange-700 font-bold">{attempt.candidateInfo.fullName}</strong> • MSSV: <strong className="font-mono text-slate-800">{attempt.candidateInfo.candidateCode}</strong> • Lớp: {attempt.candidateInfo.className}
             </p>
           </div>
 
@@ -149,7 +160,7 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
             <div className={`flex flex-col items-center justify-center p-5 text-white rounded-2xl shadow-lg min-w-48 text-center shrink-0 ${
               attempt.isDisqualified
                 ? 'bg-gradient-to-br from-red-600 to-rose-700 shadow-red-500/20'
-                : 'bg-gradient-to-br from-blue-600 to-indigo-700 shadow-blue-500/20'
+                : 'bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 shadow-orange-500/25'
             }`}>
               <span className="text-xs font-semibold uppercase tracking-wider text-white/80">
                 {attempt.isDisqualified ? 'Trạng thái bài thi' : 'Điểm số đạt được'}
@@ -165,13 +176,13 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
                   Đình chỉ thi
                 </span>
               ) : attempt.status === 'timed_out' ? (
-                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-amber-400 text-slate-900 rounded-full flex items-center gap-1 shadow-xs">
-                  <Clock className="w-3 h-3 text-slate-900" />
+                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/30 text-white rounded-full flex items-center gap-1 shadow-xs">
+                  <Clock className="w-3 h-3 text-white" />
                   <span>Hết giờ làm bài</span>
                 </span>
               ) : isHighPerformer ? (
-                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/20 rounded-full flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-300" />
+                <span className="mt-2 text-[11px] font-bold px-2.5 py-0.5 bg-white/25 rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-yellow-200" />
                   <span>Xuất sắc</span>
                 </span>
               ) : null}

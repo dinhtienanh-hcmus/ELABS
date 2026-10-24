@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Exam, CandidateInfo, CandidateAttempt, getExamCandidateFields } from '../../types/exam';
 import { Clock, Award, User, Hash, School, Phone, FileText, ArrowRight, X, AlertTriangle, Lock, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { OfficialLogos } from '../OfficialLogos';
 
 interface CandidateEntryModalProps {
   exam: Exam;
@@ -153,15 +154,15 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
       aria-label="Nhập thông tin thí sinh tham gia ELABS"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 my-8">
-        {/* Header with ELABS HCMUS Branding */}
-        <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-900 px-6 py-5 text-white">
-          <div className="flex items-center justify-between">
-            <span className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-white/20 rounded-full backdrop-blur-sm flex items-center gap-1">
-              <span>ELABS XIX - 2026</span>
-              <span>•</span>
-              <span>Mã: {exam.code}</span>
-            </span>
+      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-amber-200/80 my-8">
+        {/* Header with 4 Official Logos: Khoa -> Đoàn -> Hội -> ELABS & Signature Warm Amber/Golden Gradient */}
+        <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 px-6 py-5 text-white">
+          <div className="flex items-center justify-between gap-2">
+            {/* 4 Logos in Required Order */}
+            <div className="bg-white/95 px-3 py-1 rounded-xl shadow-xs border border-amber-200/60">
+              <OfficialLogos size="sm" />
+            </div>
+
             <button
               onClick={onClose}
               aria-label="Đóng biểu mẫu"
@@ -171,24 +172,21 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
             </button>
           </div>
 
-          <div className="text-[11px] font-semibold text-blue-200 uppercase tracking-wider mt-2">
+          <div className="text-[11px] font-bold text-amber-100 uppercase tracking-wider mt-3">
             Khoa Điện tử - Viễn thông | Trường Đại học Khoa học tự nhiên, ĐHQG-HCM
           </div>
-          <h2 className="text-xl font-bold mt-1 leading-tight">{exam.title}</h2>
+          <h2 className="text-xl font-bold mt-0.5 leading-tight text-white">{exam.title}</h2>
 
-          <div className="flex flex-wrap items-center gap-4 text-xs text-blue-100 mt-2.5">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-amber-100 mt-2.5">
             <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
               Thời gian: <strong>{exam.durationMinutes} phút</strong>
             </span>
             <span className="flex items-center gap-1.5">
               <Award className="w-3.5 h-3.5" />
-              Số câu hỏi: <strong>{exam.questions.length} câu</strong>
+              Số câu: <strong>{exam.questions.length} câu</strong>
             </span>
-            <span className="flex items-center gap-1.5">
-              Thang điểm: <strong>{exam.totalPoints}đ</strong>
-            </span>
-            <span className="flex items-center gap-1.5 bg-white/15 px-2 py-0.5 rounded-md font-semibold">
+            <span className="flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded-md font-semibold text-amber-200">
               <ShieldAlert className="w-3.5 h-3.5 text-amber-300" />
               Lượt thi: <strong>{maxAttempts > 0 ? `Tối đa ${maxAttempts} lượt` : 'Không giới hạn'}</strong>
             </span>
@@ -197,7 +195,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
 
         {/* Strict Fullscreen Notice Box */}
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-start gap-3 text-amber-900 text-xs">
-          <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <Lock className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
             <strong className="text-amber-950">Quy chế thi ELABS:</strong> {ruleNote}
           </div>
@@ -282,7 +280,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
                       <select
                         value={fieldValues[field.id] || ''}
                         onChange={(e) => handleFieldChange(field.id, e.target.value)}
-                        className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-indigo-300 rounded-xl text-xs sm:text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all cursor-pointer"
+                        className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-amber-300 rounded-xl text-xs sm:text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:bg-white outline-none transition-all cursor-pointer"
                         required={field.required}
                       >
                         <option value="">
@@ -300,7 +298,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
                         value={fieldValues[field.id] || ''}
                         onChange={(e) => handleFieldChange(field.id, e.target.value)}
                         placeholder={field.placeholder}
-                        className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all ${
+                        className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-amber-500 focus:bg-white outline-none transition-all ${
                           field.id === 'candidateCode' ? 'font-bold uppercase' : 'font-medium'
                         }`}
                         required={field.required}
@@ -322,7 +320,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
                 value={enteredPassword}
                 onChange={(e) => setEnteredPassword(e.target.value)}
                 placeholder="Nhập mật khẩu do BTC ELABS cấp"
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-amber-500 focus:bg-white outline-none transition-all"
                 required
               />
             </div>
@@ -342,7 +340,7 @@ export const CandidateEntryModal: React.FC<CandidateEntryModalProps> = ({
               className={`px-6 py-2.5 text-xs sm:text-sm font-bold rounded-xl flex items-center gap-2 transition-all ${
                 isAttemptLimitReached
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] shadow-md shadow-blue-500/25 cursor-pointer'
+                  : 'text-white bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:via-orange-600 hover:to-amber-700 active:scale-[0.98] shadow-md shadow-orange-500/25 cursor-pointer'
               }`}
             >
               <span>{isAttemptLimitReached ? `Đã hết lượt thi (${candidatePreviousAttempts.length}/${maxAttempts})` : 'Vào thi (Bật Toàn màn hình)'}</span>

@@ -1214,7 +1214,7 @@ export const BtcExamEditor: React.FC<BtcExamEditorProps> = ({
           <button
             type="button"
             onClick={handleSaveExam}
-            className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:via-orange-600 hover:to-amber-700 active:scale-[0.98] rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Check className="w-4 h-4" />
             <span>Lưu &amp; Xuất bản đề thi</span>

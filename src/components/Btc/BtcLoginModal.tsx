@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, User as UserIcon, ArrowRight, X, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { OfficialLogos } from '../OfficialLogos';
 
 interface BtcLoginModalProps {
   isOpen: boolean;
@@ -97,10 +98,23 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in"
     >
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        {/* Header with 4 Official Logos: Khoa -> Đoàn -> Hội -> ELABS */}
+        <div className="pb-3 border-b border-amber-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="px-3 py-1 bg-amber-50 rounded-xl border border-amber-200/80">
+              <OfficialLogos size="sm" />
+            </div>
+            <button
+              onClick={handleClose}
+              aria-label="Đóng đăng nhập"
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-700 text-white flex items-center justify-center font-bold shadow-md shadow-blue-500/20 shrink-0">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/20 shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
@@ -108,13 +122,6 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
               <p className="text-[11px] text-slate-500 font-medium">Hệ thống quản lý đề thi &amp; phòng thi ELABS 2026</p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            aria-label="Đóng đăng nhập"
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {error && (
@@ -138,7 +145,7 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
                 placeholder="Nhập email BTC đã được cấp quyền..."
                 autoComplete="off"
                 disabled={isSubmitting}
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:bg-white outline-none"
               />
             </div>
           </div>
@@ -156,7 +163,7 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
                 placeholder="Nhập mật khẩu quản trị..."
                 autoComplete="new-password"
                 disabled={isSubmitting}
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:bg-white outline-none"
               />
             </div>
           </div>
@@ -165,7 +172,7 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+              className="w-full py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:via-orange-600 hover:to-amber-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
             >
               <span>{isSubmitting ? 'Đang kiểm tra...' : 'Vào trang Quản trị'}</span>
               <ArrowRight className="w-4 h-4" />

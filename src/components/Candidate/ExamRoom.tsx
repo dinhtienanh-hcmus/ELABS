@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Exam, CandidateInfo, Question } from '../../types/exam';
 import { MathView } from '../MathView';
 import { ImageLightbox } from '../ImageLightbox';
+import { OfficialLogos } from '../OfficialLogos';
 import { saveActiveTakerPing, removeActiveTaker } from '../../utils/storage';
 import {
   Clock,
@@ -878,19 +879,26 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       )}
 
       {/* Top Floating Exam Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 shadow-xs">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-amber-200/80 px-4 py-2.5 shadow-xs">
+        {/* Top Accent Strip */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500" />
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Contest info & Candidate identity */}
+          {/* 4 Logos & Contest info & Candidate identity */}
           <div className="flex items-center gap-3 min-w-0">
-            <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 text-white tracking-wider shrink-0">
-              ELABS XIX - 2026
+            {/* 4 Official Logos: Khoa -> Đoàn -> Hội -> ELABS */}
+            <div className="hidden lg:flex items-center px-2.5 py-0.5 bg-amber-50 border border-amber-200 rounded-xl shrink-0">
+              <OfficialLogos size="sm" />
+            </div>
+
+            <span className="px-2.5 py-1 text-xs font-black rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white tracking-wider shrink-0 shadow-xs">
+              ELABS XIX
             </span>
             <div className="truncate">
               <h1 className="text-sm md:text-base font-bold text-slate-900 truncate">
                 {exam.title}
               </h1>
               <div className="flex items-center gap-2 text-xs text-slate-500 font-medium truncate">
-                <span className="text-slate-800 font-bold">{candidateInfo.fullName}</span>
+                <span className="text-orange-700 font-bold">{candidateInfo.fullName}</span>
                 <span>•</span>
                 <span>MSSV: <strong className="font-mono text-slate-800">{candidateInfo.candidateCode}</strong></span>
                 <span>•</span>

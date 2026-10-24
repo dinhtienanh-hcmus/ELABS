@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Exam, CandidateAttempt } from '../../types/exam';
+import { OfficialLogos } from '../OfficialLogos';
 import {
   Plus,
   FileText,
@@ -125,10 +126,15 @@ export const BtcDashboard: React.FC<BtcDashboardProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 animate-in fade-in">
       {/* Top Welcome & Actions Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
-        <div>
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-amber-200/80 shadow-xs">
+        <div className="space-y-2">
+          {/* 4 Official Logos: Khoa -> Đoàn -> Hội -> ELABS */}
+          <div className="inline-flex items-center px-3.5 py-1 bg-amber-50 rounded-2xl border border-amber-200/80 mb-1">
+            <OfficialLogos size="sm" />
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-100 text-blue-800">
+            <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-900 border border-amber-200">
               Khu Vực Quản Lý Đề Thi
             </span>
             <span
@@ -151,7 +157,11 @@ export const BtcDashboard: React.FC<BtcDashboardProps> = ({
             </span>
           </div>
           <h1 className="text-2xl font-black text-slate-900 mt-1.5 uppercase">
-            CUỘC THI HỌC THUẬT ELABS LẦN THỨ XIX - NĂM 2026
+            CUỘC THI HỌC THUẬT{' '}
+            <span className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 bg-clip-text text-transparent">
+              ELABS LẦN THỨ XIX
+            </span>{' '}
+            - NĂM 2026
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Đề thi và bài nộp của thí sinh được đồng bộ trực tuyến thời gian thực trên mọi máy tính, điện thoại và tab ẩn danh
@@ -217,7 +227,7 @@ export const BtcDashboard: React.FC<BtcDashboardProps> = ({
           <button
             type="button"
             onClick={onCreateExam}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer"
+            className="px-5 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:via-orange-600 hover:to-amber-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-2 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ Tạo đề thi TeX mới</span>
