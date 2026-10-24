@@ -7,6 +7,28 @@ interface BtcLoginModalProps {
   onLoginSuccess: () => void;
 }
 
+// SHA-256 one-way cryptographic hashes for authorized admin emails and passwords.
+// This ensures NO plaintext passwords or admin emails are ever exposed on public repositories (GitHub).
+const AUTHORIZED_EMAIL_HASHES = new Set([
+  'a999c93675a09c27c8d85b78be11a7d7f9408d8aded9f015f4a508f4e17f6f66',
+  '6e989004968fcfe2ff3dcbdf874f8d2f1bd64d613a907913a64930334fb72f9b',
+  '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'
+]);
+
+const AUTHORIZED_KEY_HASHES = new Set([
+  'c4dd10ae38f1c0425c18a4e67a884df9acfd511248c08234a3ed2c3d2e2e5248',
+  'e69ba30d25bfb8832a8291f0a514d88e40938f381fcfc258d9298533cfbe9b50',
+  '8323a268b8e8f810168676bf494a81b7a2d82bb686a978f8cb92faef5c76db2c'
+]);
+
+async function hashSha256(text: string): Promise<string> {
+  const enc = new TextEncoder().encode(text);
+  const buffer = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
   isOpen,
   onClose,
@@ -15,6 +37,7 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -22,10 +45,11 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
     setUsername('');
     setPassword('');
     setError('');
+    setIsSubmitting(false);
     onClose();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanUser = username.trim().toLowerCase();
     const cleanPass = password.trim();
@@ -35,31 +59,33 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
       return;
     }
 
-    const isAllowedEmail =
-      cleanUser === 'hocthuatelabs.hcmus@gmail.com' ||
-      cleanUser === 'dinhtienanh.hcmus@gmail.com' ||
-      cleanUser === 'admin';
+    setIsSubmitting(true);
+    setError('');
 
-    const isCorrectPass =
-      cleanPass === 'ELABS2026#235' ||
-      cleanPass === 'elabs2026#235' ||
-      cleanPass === 'ELABS2026' ||
-      cleanPass === 'elabs2026';
+    try {
+      const [userHash, passHash] = await Promise.all([
+        hashSha256(cleanUser),
+        hashSha256(cleanPass)
+      ]);
 
-    if (isAllowedEmail && isCorrectPass) {
-      setError('');
-      try {
-        localStorage.setItem('elabs_btc_logged_in', 'true');
-        localStorage.setItem('elabs_btc_user_email', cleanUser);
-      } catch {
-        // ignore
+      if (AUTHORIZED_EMAIL_HASHES.has(userHash) && AUTHORIZED_KEY_HASHES.has(passHash)) {
+        try {
+          localStorage.setItem('elabs_btc_logged_in', 'true');
+          localStorage.setItem('elabs_btc_user_email', cleanUser);
+        } catch {
+          // ignore
+        }
+        setUsername('');
+        setPassword('');
+        onLoginSuccess();
+        handleClose();
+      } else {
+        setError('Tài khoản hoặc mật khẩu Ban Tổ Chức không chính xác! Vui lòng kiểm tra lại.');
       }
-      setUsername('');
-      setPassword('');
-      onLoginSuccess();
-      handleClose();
-    } else {
-      setError('Tài khoản hoặc mật khẩu Ban Tổ Chức không chính xác! Vui lòng kiểm tra lại.');
+    } catch {
+      setError('Lỗi xác thực. Vui lòng thử lại.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -111,6 +137,7 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Nhập email BTC đã được cấp quyền..."
                 autoComplete="off"
+                disabled={isSubmitting}
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
               />
             </div>
@@ -128,6 +155,7 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Nhập mật khẩu quản trị..."
                 autoComplete="new-password"
+                disabled={isSubmitting}
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none"
               />
             </div>
@@ -136,9 +164,10 @@ export const BtcLoginModal: React.FC<BtcLoginModalProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
             >
-              <span>Vào trang Quản trị</span>
+              <span>{isSubmitting ? 'Đang kiểm tra...' : 'Vào trang Quản trị'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

@@ -8,15 +8,6 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isAdmin() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && (
-          request.auth.token.email == 'dinhtienanh.hcmus@gmail.com' ||
-          request.auth.token.email == 'hocthuatelabs.hcmus@gmail.com'
-        );
-    }
-
     function isValidExam(data) {
       return data.keys().hasAll(['id', 'code', 'title', 'durationMinutes', 'totalPoints', 'status', 'questions'])
         && data.id is string && data.id.size() >= 1 && data.id.size() <= 128

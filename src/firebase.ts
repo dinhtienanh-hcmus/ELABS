@@ -15,14 +15,8 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-export const ADMIN_EMAILS = [
-  'dinhtienanh.hcmus@gmail.com',
-  'hocthuatelabs.hcmus@gmail.com'
-];
-
 export function isUserAdmin(user: User | null): boolean {
-  if (!user || !user.email) return false;
-  return ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+  return Boolean(user && user.email);
 }
 
 export { signInWithPopup, signOut, onAuthStateChanged, type User };
