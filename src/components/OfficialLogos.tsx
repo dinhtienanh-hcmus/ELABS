@@ -1,29 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
+import logoFetel from '../assets/logos/logo_fetel.png';
+import logoDoan from '../assets/logos/logo_doan.png';
+import logoHoi from '../assets/logos/logo_hoi.png';
+import logoElabs from '../assets/logos/logo_elabs.png';
 
 export const OFFICIAL_LOGOS = [
   {
     id: 'fetel',
     name: 'Khoa Điện tử - Viễn thông (FETEL - HCMUS)',
     shortName: 'Khoa ĐT-VT',
-    src: '/assets/aistudio/FETEL_20nam_8c3c3058.png'
+    src: logoFetel,
+    fallbackSrc: './assets/aistudio/FETEL_20nam_8c3c3058.png'
   },
   {
     id: 'doan',
     name: 'Đoàn Thanh niên Cộng sản Hồ Chí Minh',
     shortName: 'Đoàn TNCS',
-    src: '/assets/aistudio/Logo__o_n_Thanh_NI_n_C_ng_S_n_H__Ch__Minh_7ff1236e.png'
+    src: logoDoan,
+    fallbackSrc: './assets/aistudio/Logo__o_n_Thanh_NI_n_C_ng_S_n_H__Ch__Minh_7ff1236e.png'
   },
   {
     id: 'hoi',
     name: 'Hội Sinh viên Việt Nam',
     shortName: 'Hội Sinh viên',
-    src: '/assets/aistudio/Logo_H_i_Sinh_Vi_n_Vi_t_Nam_fe64c19b.png'
+    src: logoHoi,
+    fallbackSrc: './assets/aistudio/Logo_H_i_Sinh_Vi_n_Vi_t_Nam_fe64c19b.png'
   },
   {
     id: 'elabs',
     name: 'Cuộc thi Học thuật ELABS XIX - 2026',
     shortName: 'ELABS 2026',
-    src: '/assets/aistudio/Logo_ELABS_bade6934.png'
+    src: logoElabs,
+    fallbackSrc: './assets/aistudio/Logo_ELABS_bade6934.png'
   }
 ] as const;
 
@@ -64,6 +72,13 @@ export const OfficialLogos: React.FC<OfficialLogosProps> = ({
             alt={logo.name}
             className={`${sizeClasses[size]} transition-transform duration-200`}
             loading="eager"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (target.src !== logo.fallbackSrc && !target.dataset.triedFallback) {
+                target.dataset.triedFallback = 'true';
+                target.src = logo.fallbackSrc;
+              }
+            }}
           />
         </div>
       ))}
