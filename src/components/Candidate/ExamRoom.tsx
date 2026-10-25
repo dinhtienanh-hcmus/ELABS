@@ -37,6 +37,46 @@ interface ExamRoomProps {
   onExit: () => void;
 }
 
+/**
+ * 32-bit FNV-1a hash function for generating integer seeds from candidate identity
+ */
+function hashStringSeed(str: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * High-quality Mulberry32 32-bit PRNG
+ */
+function createMulberry32(seed: number) {
+  let s = seed >>> 0;
+  return function next(): number {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Sound Fisher-Yates array shuffle with deterministic seed
+ */
+function shuffleArrayWithSeed<T>(array: T[], seedStr: string): T[] {
+  const result = [...array];
+  const rng = createMulberry32(hashStringSeed(seedStr));
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const temp = result[i];
+    result[i] = result[j];
+    result[j] = temp;
+  }
+  return result;
+}
+
 export const ExamRoom: React.FC<ExamRoomProps> = ({
   exam,
   candidateInfo,
@@ -168,29 +208,96 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
     return withCounts.length > 0 ? withCounts : [rawSections[0]];
   }, [exam.sections, exam.questions]);
 
-  // Questions prepared (ordered by section, and shuffled within section if settings require)
+  // Load saved question order if candidate refreshed the page mid-exam
+  const savedQuestionOrder = useMemo<string[] | null>(() => {
+    try {
+      const raw = localStorage.getItem(sessionKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.questionOrder) && parsed.questionOrder.length > 0) {
+          return parsed.questionOrder;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [sessionKey]);
+
+  // Questions prepared: strictly preserved by section, truly randomized per candidate when shuffleQuestions is true
   const displayQuestions = useMemo(() => {
     const fallbackSecId =
       exam.sections && exam.sections.length > 0 ? exam.sections[0].id : 'part_1';
     const sectionOrder = new Map<string, number>();
     effectiveSections.forEach((sec, idx) => sectionOrder.set(sec.id, idx));
 
-    const qs = exam.questions.map((q) => ({
+    const normalizedQuestions = exam.questions.map((q) => ({
       ...q,
       sectionId:
-        q.sectionId && sectionOrder.has(q.sectionId) ? q.sectionId : effectiveSections[0].id || fallbackSecId
+        q.sectionId && sectionOrder.has(q.sectionId)
+          ? q.sectionId
+          : effectiveSections[0]?.id || fallbackSecId
     }));
 
-    return qs.sort((a, b) => {
-      const secA = sectionOrder.get(a.sectionId!) ?? 0;
-      const secB = sectionOrder.get(b.sectionId!) ?? 0;
-      if (secA !== secB) return secA - secB;
-      if (exam.settings?.shuffleQuestions) {
-        return a.id.localeCompare(b.id);
+    // If candidate has an existing session in localStorage with a valid saved order, restore it exactly
+    if (savedQuestionOrder && savedQuestionOrder.length === normalizedQuestions.length) {
+      const qMap = new Map<string, typeof normalizedQuestions[0]>();
+      normalizedQuestions.forEach((q) => qMap.set(q.id, q));
+      const restored = savedQuestionOrder
+        .map((id) => qMap.get(id))
+        .filter((q): q is typeof normalizedQuestions[0] => Boolean(q));
+      if (restored.length === normalizedQuestions.length) {
+        return restored;
       }
-      return a.number - b.number;
+    }
+
+    const candidateSeed = (
+      candidateInfo.candidateCode ||
+      candidateInfo.fullName ||
+      'taker_seed'
+    )
+      .trim()
+      .toLowerCase();
+
+    // Group questions by section
+    const grouped = new Map<string, typeof normalizedQuestions>();
+    effectiveSections.forEach((sec) => grouped.set(sec.id, []));
+
+    normalizedQuestions.forEach((q) => {
+      const targetSecId = q.sectionId || effectiveSections[0].id;
+      const list = grouped.get(targetSecId) || grouped.get(effectiveSections[0].id);
+      if (list) {
+        list.push(q);
+      }
     });
-  }, [exam.questions, exam.sections, exam.settings?.shuffleQuestions, effectiveSections]);
+
+    const finalOrdered: typeof normalizedQuestions = [];
+
+    effectiveSections.forEach((sec) => {
+      const secQs = grouped.get(sec.id) || [];
+      if (exam.settings?.shuffleQuestions) {
+        // True Fisher-Yates shuffle seeded deterministically by candidate + exam + section
+        const seedStr = `${exam.id}_${candidateSeed}_${sec.id}_shuffle`;
+        const shuffled = shuffleArrayWithSeed(secQs, seedStr);
+        finalOrdered.push(...shuffled);
+      } else {
+        // Natural question numbering order
+        secQs.sort((a, b) => (a.number || 0) - (b.number || 0));
+        finalOrdered.push(...secQs);
+      }
+    });
+
+    return finalOrdered;
+  }, [
+    exam.questions,
+    exam.sections,
+    exam.settings?.shuffleQuestions,
+    effectiveSections,
+    candidateInfo.candidateCode,
+    candidateInfo.fullName,
+    savedQuestionOrder,
+    exam.id
+  ]);
 
   const currentSection = effectiveSections[activeSectionIndex] || effectiveSections[0];
 
@@ -215,13 +322,14 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
           marked: Array.from(markedForReview),
           remainingSeconds,
           targetEndTime: targetEndTimeRef.current || (Date.now() + remainingSeconds * 1000),
+          questionOrder: displayQuestions.map((q) => q.id),
           updatedAt: Date.now()
         })
       );
     } catch {
       // ignore
     }
-  }, [answers, markedForReview, remainingSeconds, sessionKey]);
+  }, [answers, markedForReview, remainingSeconds, sessionKey, displayQuestions]);
 
   const examStartedAtRef = useRef<number>(Date.now());
   const liveStateRef = useRef({
@@ -242,6 +350,7 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
 
   const sendHeartbeatPing = useCallback(() => {
     const st = liveStateRef.current;
+    const timeSpent = Math.max(0, totalSeconds - remainingSecondsRef.current);
     saveActiveTakerPing({
       sessionId: sessionIdRef.current,
       examId: exam.id,
@@ -249,13 +358,14 @@ export const ExamRoom: React.FC<ExamRoomProps> = ({
       candidateCode: candidateInfo.candidateCode,
       className: candidateInfo.className,
       startedAt: examStartedAtRef.current,
+      timeSpentSeconds: timeSpent,
       lastPing: Date.now(),
       answeredCount: st.answeredCount,
       totalQuestions: st.totalQuestions,
       tabSwitchCount: st.tabSwitchCount,
       isCurrentlyFullscreen: st.isFullscreenActive
     });
-  }, [exam.id, candidateInfo.fullName, candidateInfo.candidateCode, candidateInfo.className]);
+  }, [exam.id, candidateInfo.fullName, candidateInfo.candidateCode, candidateInfo.className, totalSeconds]);
 
   // Heartbeat ping every 45s (and only removeActiveTaker once when leaving ExamRoom)
   useEffect(() => {

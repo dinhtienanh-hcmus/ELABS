@@ -32,11 +32,22 @@ export interface ActiveTaker {
   className: string;
   startedAt: number;
   lastPing: number;
+  timeSpentSeconds?: number; // Exact elapsed seconds inside exam, immune to cross-device clock skew
   answeredCount: number;
   totalQuestions: number;
   tabSwitchCount: number;
   isCurrentlyFullscreen?: boolean;
   isVirtual?: boolean;
+}
+
+/**
+ * Checks if a taker is genuinely alive (heartbeat within 90s, avoids clock-skew negative loops)
+ */
+export function isTakerAlive(taker: ActiveTaker, now: number = Date.now()): boolean {
+  if (!taker || !taker.lastPing) return false;
+  const timeDiff = now - taker.lastPing;
+  // Allow at most 25s forward drift and 90s backward latency
+  return timeDiff >= -25000 && timeDiff <= 90000;
 }
 
 function cleanForFirestore<T>(data: T): T {
@@ -166,7 +177,7 @@ export function saveAttempts(attempts: CandidateAttempt[]): void {
   });
 }
 
-export function saveAttempt(attempt: CandidateAttempt): void {
+export async function saveAttempt(attempt: CandidateAttempt): Promise<CandidateAttempt> {
   const docId = toSafeDocId(attempt.id);
   const normalizedAttempt: CandidateAttempt = {
     ...attempt,
@@ -174,6 +185,7 @@ export function saveAttempt(attempt: CandidateAttempt): void {
     examId: toSafeDocId(attempt.examId)
   };
 
+  // 1. Instant local persistence (0ms delay)
   try {
     const existing = loadAttempts();
     const idx = existing.findIndex((a) => a.id === normalizedAttempt.id);
@@ -187,20 +199,66 @@ export function saveAttempt(attempt: CandidateAttempt): void {
     console.error('Failed to save attempt locally', e);
   }
 
+  // 2. High-priority immediate write to Cloud Firestore (zero delay)
   const payload = cleanForFirestore(normalizedAttempt);
-  const writeWithRetry = async (retriesLeft: number, delayMs: number): Promise<void> => {
-    try {
-      await setDoc(doc(db, 'attempts', docId), payload);
-    } catch (error) {
-      if (retriesLeft > 0) {
-        await new Promise((r) => setTimeout(r, delayMs + Math.random() * 400));
-        return writeWithRetry(retriesLeft - 1, delayMs * 2);
+  try {
+    await setDoc(doc(db, 'attempts', docId), payload);
+  } catch (err) {
+    console.warn('Initial Firestore attempt save encountered an issue, retrying in background:', err);
+    // Background retry with progressive backoff
+    (async () => {
+      let retries = 3;
+      let delay = 400;
+      while (retries > 0) {
+        try {
+          await new Promise((r) => setTimeout(r, delay));
+          await setDoc(doc(db, 'attempts', docId), payload);
+          return;
+        } catch (retryErr) {
+          retries--;
+          delay *= 1.8;
+          if (retries === 0) {
+            handleFirestoreError(retryErr, OperationType.WRITE, `attempts/${docId}`);
+          }
+        }
       }
-      handleFirestoreError(error, OperationType.WRITE, `attempts/${docId}`);
-    }
-  };
+    })();
+  }
 
-  writeWithRetry(4, 600);
+  return normalizedAttempt;
+}
+
+/**
+ * Directly queries Firestore for the latest attempts to refresh scoreboards on demand
+ */
+export async function fetchCloudAttempts(): Promise<CandidateAttempt[]> {
+  try {
+    const snap = await getDocs(collection(db, 'attempts'));
+    const cloudAttempts: CandidateAttempt[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as CandidateAttempt;
+      if (data && data.id && !LEGACY_MOCK_ATTEMPT_IDS.has(data.id)) {
+        cloudAttempts.push(data);
+      }
+    });
+
+    const localAttempts = loadAttempts();
+    const cloudIds = new Set(cloudAttempts.map((a) => a.id));
+    const missingInCloud = localAttempts.filter(
+      (la) => !cloudIds.has(toSafeDocId(la.id)) && !LEGACY_MOCK_ATTEMPT_IDS.has(la.id)
+    );
+
+    const merged = [...cloudAttempts, ...missingInCloud];
+    merged.sort(
+      (a, b) =>
+        (b.submittedAt || b.startedAt || 0) - (a.submittedAt || a.startedAt || 0)
+    );
+    saveAttemptsLocalOnly(merged);
+    return merged;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'attempts');
+    return loadAttempts();
+  }
 }
 
 export async function clearExamAttemptsFromCloud(
@@ -360,7 +418,7 @@ export function loadActiveTakers(): ActiveTaker[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const now = Date.now();
-        return parsed.filter((t: ActiveTaker) => now - t.lastPing < 180000);
+        return parsed.filter((t: ActiveTaker) => isTakerAlive(t, now));
       }
     }
   } catch (e) {
@@ -503,6 +561,7 @@ export function subscribeToCloudAttempts(
 
 /**
  * Real-time subscription to `/activeTakers` in Firestore.
+ * Automatically cleans up zombie sessions with stale or clock-skewed timestamps.
  */
 export function subscribeToCloudActiveTakers(
   onUpdate: (takers: ActiveTaker[]) => void
@@ -512,12 +571,24 @@ export function subscribeToCloudActiveTakers(
     (snapshot) => {
       const now = Date.now();
       const active: ActiveTaker[] = [];
+      const staleDocs: any[] = [];
+
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as ActiveTaker;
-        if (data && data.sessionId && now - data.lastPing < 180000) {
-          active.push(data);
+        if (data && data.sessionId) {
+          if (isTakerAlive(data, now)) {
+            active.push(data);
+          } else {
+            // Automatically clean up stale or ghost records (especially those with clock-skew)
+            staleDocs.push(docSnap.ref);
+          }
         }
       });
+
+      if (staleDocs.length > 0) {
+        staleDocs.forEach((ref) => deleteDoc(ref).catch(() => {}));
+      }
+
       try {
         localStorage.setItem(ACTIVE_TAKERS_KEY, JSON.stringify(active));
       } catch {
@@ -529,4 +600,39 @@ export function subscribeToCloudActiveTakers(
       handleFirestoreError(error, OperationType.LIST, 'activeTakers');
     }
   );
+}
+
+/**
+ * Manually clears all active taker sessions for an exam or all exams
+ */
+export async function clearAllActiveTakersFromCloud(examId?: string): Promise<number> {
+  const isAll = !examId || examId === 'all';
+  const targetExamId = examId ? toSafeDocId(examId) : '';
+
+  try {
+    const snap = await getDocs(collection(db, 'activeTakers'));
+    const batch = writeBatch(db);
+    let count = 0;
+
+    snap.forEach((d) => {
+      const data = d.data() as ActiveTaker;
+      if (isAll || toSafeDocId(data.examId) === targetExamId) {
+        batch.delete(d.ref);
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      await batch.commit();
+    }
+
+    const local = loadActiveTakers().filter(
+      (t) => !isAll && toSafeDocId(t.examId) !== targetExamId
+    );
+    localStorage.setItem(ACTIVE_TAKERS_KEY, JSON.stringify(local));
+    return count;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'activeTakers/clear');
+    return 0;
+  }
 }

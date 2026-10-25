@@ -12,13 +12,15 @@ import {
   Users,
   User,
   Trophy,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 
 interface BtcSubmissionsViewProps {
   exam: Exam;
   allExams?: Exam[];
   attempts: CandidateAttempt[];
+  onRefreshAttempts?: () => Promise<any> | void;
   onClearExamAttempts?: (targetId?: string) => Promise<void> | void;
   onClose: () => void;
 }
@@ -42,6 +44,7 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
   exam,
   allExams = [],
   attempts,
+  onRefreshAttempts,
   onClearExamAttempts,
   onClose
 }) => {
@@ -51,6 +54,31 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
   const [mergeAllExams, setMergeAllExams] = useState<boolean>(false);
   const [inspectAttempt, setInspectAttempt] = useState<CandidateAttempt | null>(null);
   const [inspectTeam, setInspectTeam] = useState<AggregatedTeamRow | null>(null);
+
+  // Live Refresh & synchronization states
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+
+  const handleManualRefresh = async () => {
+    if (!onRefreshAttempts) return;
+    setIsRefreshing(true);
+    try {
+      await onRefreshAttempts();
+      setLastRefreshedAt(new Date());
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  // Background auto-refresh every 8s while BTC is reviewing the scoreboard
+  React.useEffect(() => {
+    if (!onRefreshAttempts) return;
+    const interval = setInterval(() => {
+      onRefreshAttempts();
+      setLastRefreshedAt(new Date());
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [onRefreshAttempts]);
 
   // Clear scoreboard state
   const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
@@ -420,6 +448,26 @@ export const BtcSubmissionsView: React.FC<BtcSubmissionsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onRefreshAttempts && (
+            <button
+              type="button"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                isRefreshing
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+              }`}
+              title="Cập nhật điểm số và bài nộp mới nhất từ máy chủ ngay lập tức"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Đang cập nhật...' : 'Làm mới kết quả'}</span>
+              <span className="text-[10px] text-slate-400 font-mono font-normal hidden sm:inline">
+                ({lastRefreshedAt.toLocaleTimeString('vi-VN')})
+              </span>
+            </button>
+          )}
+
           {onClearExamAttempts && examAttempts.length > 0 && (
             <button
               type="button"

@@ -27,6 +27,7 @@ interface BtcDashboardProps {
   activeCount: number;
   cloudStatus?: 'syncing' | 'synced' | 'error';
   onForceSyncCloud?: () => Promise<void>;
+  onRefreshAttempts?: () => Promise<any> | void;
   onImportExamsJson?: (importedExams: Exam[]) => void;
   onCreateExam: () => void;
   onEditExam: (exam: Exam) => void;
@@ -43,6 +44,7 @@ export const BtcDashboard: React.FC<BtcDashboardProps> = ({
   activeCount,
   cloudStatus = 'synced',
   onForceSyncCloud,
+  onRefreshAttempts,
   onImportExamsJson,
   onCreateExam,
   onEditExam,
@@ -83,10 +85,10 @@ export const BtcDashboard: React.FC<BtcDashboardProps> = ({
   };
 
   const handleManualSync = async () => {
-    if (!onForceSyncCloud) return;
     setIsManualSyncing(true);
     try {
-      await onForceSyncCloud();
+      if (onForceSyncCloud) await onForceSyncCloud();
+      if (onRefreshAttempts) await onRefreshAttempts();
     } finally {
       setTimeout(() => setIsManualSyncing(false), 600);
     }
@@ -247,14 +249,27 @@ export const BtcDashboard: React.FC<BtcDashboardProps> = ({
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <Users className="w-6 h-6" />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-xs font-medium text-slate-500">Lượt nộp bài</div>
+              <div className="text-2xl font-black text-slate-900">{totalSubmissions} lượt</div>
+            </div>
           </div>
-          <div>
-            <div className="text-xs font-medium text-slate-500">Lượt nộp bài</div>
-            <div className="text-2xl font-black text-slate-900">{totalSubmissions} lượt</div>
-          </div>
+          {onRefreshAttempts && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isManualSyncing}
+              className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
+              title="Làm mới điểm số & bài nộp từ đám mây"
+            >
+              <RefreshCw className={`w-4 h-4 ${isManualSyncing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">

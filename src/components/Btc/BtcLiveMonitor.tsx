@@ -3,9 +3,11 @@ import { Exam } from '../../types/exam';
 import {
   loadActiveTakers,
   subscribeToCloudActiveTakers,
+  removeActiveTaker,
+  clearAllActiveTakersFromCloud,
   ActiveTaker
 } from '../../utils/storage';
-import { Activity, ShieldAlert, Clock, User, Wifi, RefreshCw } from 'lucide-react';
+import { Activity, ShieldAlert, Clock, User, Wifi, RefreshCw, Trash2, UserX } from 'lucide-react';
 
 interface BtcLiveMonitorProps {
   exam: Exam;
@@ -37,6 +39,23 @@ export const BtcLiveMonitor: React.FC<BtcLiveMonitorProps> = ({ exam, onClose })
     };
   }, [exam.id, refreshList]);
 
+  const [isClearingStale, setIsClearingStale] = useState<boolean>(false);
+
+  const handleClearStaleTakers = async () => {
+    setIsClearingStale(true);
+    try {
+      await clearAllActiveTakersFromCloud(exam.id);
+      refreshList();
+    } finally {
+      setTimeout(() => setIsClearingStale(false), 400);
+    }
+  };
+
+  const handleRemoveOneTaker = (sessionId: string) => {
+    removeActiveTaker(sessionId);
+    setActiveTakers((prev) => prev.filter((t) => t.sessionId !== sessionId));
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6 animate-in fade-in">
       {/* Header */}
@@ -53,8 +72,8 @@ export const BtcLiveMonitor: React.FC<BtcLiveMonitorProps> = ({ exam, onClose })
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 font-mono">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400 font-mono hidden sm:inline">
             Cập nhật: {lastUpdated.toLocaleTimeString('vi-VN')}
           </span>
           <button
@@ -64,6 +83,17 @@ export const BtcLiveMonitor: React.FC<BtcLiveMonitorProps> = ({ exam, onClose })
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+          {activeTakers.length > 0 && (
+            <button
+              onClick={handleClearStaleTakers}
+              disabled={isClearingStale}
+              className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Xóa các phiên thí sinh đã thoát hoặc mất kết nối"
+            >
+              <UserX className="w-3.5 h-3.5" />
+              <span>{isClearingStale ? 'Đang dọn...' : 'Dọn dẹp phiên treo'}</span>
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
@@ -121,11 +151,17 @@ export const BtcLiveMonitor: React.FC<BtcLiveMonitorProps> = ({ exam, onClose })
               <th className="py-3 px-3">Vi phạm rời tab</th>
               <th className="py-3 px-3">Thời gian làm</th>
               <th className="py-3 px-4">Trạng thái</th>
+              <th className="py-3 px-3 text-right">Xóa phiên</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {activeTakers.map((taker) => {
-              const minutes = Math.floor((Date.now() - taker.startedAt) / 60000);
+              const timeSpent = typeof taker.timeSpentSeconds === 'number'
+                ? taker.timeSpentSeconds
+                : Math.max(0, Math.floor((Date.now() - taker.startedAt) / 1000));
+              const displayMinutes = Math.floor(timeSpent / 60);
+              const displaySeconds = timeSpent % 60;
+
               const progress = Math.round((taker.answeredCount / (taker.totalQuestions || 1)) * 100);
               const hasViolations = taker.tabSwitchCount > 0;
               const isFullscreen = taker.isCurrentlyFullscreen !== false;
@@ -181,8 +217,8 @@ export const BtcLiveMonitor: React.FC<BtcLiveMonitorProps> = ({ exam, onClose })
                       <span className="text-slate-400">0 lần</span>
                     )}
                   </td>
-                  <td className="py-3 px-3 text-slate-600 font-mono">
-                    {minutes} phút
+                  <td className="py-3 px-3 text-slate-700 font-mono font-medium">
+                    {displayMinutes} phút {displaySeconds > 0 ? `${displaySeconds}s` : ''}
                   </td>
                   <td className="py-3 px-4">
                     <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 w-max">
@@ -190,14 +226,24 @@ export const BtcLiveMonitor: React.FC<BtcLiveMonitorProps> = ({ exam, onClose })
                       <span>Đang thi</span>
                     </span>
                   </td>
+                  <td className="py-3 px-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveOneTaker(taker.sessionId)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="Xóa phiên thi này khỏi danh sách giám sát"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
 
             {activeTakers.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400">
-                  Hiện chưa có thí sinh nào đang mở phòng thi này. Bạn có thể mở tab mới vào thi hoặc dùng tính năng &quot;Giả lập 100+ thí sinh&quot; để quan sát hoạt động đồng thời.
+                <td colSpan={9} className="py-8 text-center text-slate-400">
+                  Hiện chưa có thí sinh nào đang mở phòng thi này.
                 </td>
               </tr>
             )}

@@ -8,6 +8,7 @@ import {
   loadAttempts,
   saveAttemptsLocalOnly,
   saveAttempt,
+  fetchCloudAttempts,
   clearExamAttemptsFromCloud,
   loadActiveTakers,
   resetAllStorageData,
@@ -146,7 +147,19 @@ export default function App() {
     setSelectedExamForEntry(null);
   };
 
-  const handleSubmitExam = (
+  // Refresh attempts on demand from Cloud Firestore
+  const handleRefreshAttempts = useCallback(async () => {
+    try {
+      const fresh = await fetchCloudAttempts();
+      setAttempts(fresh);
+      return fresh;
+    } catch (e) {
+      console.error('Failed to refresh attempts', e);
+      return attempts;
+    }
+  }, [attempts]);
+
+  const handleSubmitExam = async (
     answers: Record<string, string>,
     timeSpentSeconds: number,
     tabSwitchLogs: { timestamp: number; message: string }[],
@@ -170,10 +183,17 @@ export default function App() {
       isTimedOut
     );
 
-    saveAttempt(gradedAttempt);
+    // 0ms instant local state update: student immediately sees score and answers
     setAttempts((prev) => [gradedAttempt, ...prev.filter((a) => a.id !== gradedAttempt.id)]);
     setLatestSubmittedAttempt({ exam, attempt: gradedAttempt });
     setActiveExamSession(null);
+
+    // Immediate Firestore transmission so BTC sees the update with 0 artificial delay
+    try {
+      await saveAttempt(gradedAttempt);
+    } catch (err) {
+      console.warn('Background Firestore save attempt:', err);
+    }
   };
 
   // BTC Actions
@@ -341,6 +361,7 @@ export default function App() {
                   exam={submissionsExam}
                   allExams={exams}
                   attempts={attempts}
+                  onRefreshAttempts={handleRefreshAttempts}
                   onClearExamAttempts={(targetId?: string) =>
                     handleClearExamAttempts(targetId || submissionsExam.id)
                   }
@@ -354,6 +375,7 @@ export default function App() {
                 activeCount={activeCount}
                 cloudStatus={cloudStatus}
                 onForceSyncCloud={handleForceSyncCloud}
+                onRefreshAttempts={handleRefreshAttempts}
                 onImportExamsJson={handleImportExamsJson}
                 onCreateExam={() => setIsCreatingNewExam(true)}
                 onEditExam={(exam) => setEditingExam(exam)}
