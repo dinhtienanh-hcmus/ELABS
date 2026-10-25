@@ -58,56 +58,49 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Center Nav Tabs: Only visible when logged in */}
         {isBtcLoggedIn && (
-          <nav className="flex items-center gap-1 bg-amber-50/60 p-1 rounded-2xl border border-amber-200/80 text-xs font-semibold">
+          <nav className="flex items-center gap-1 bg-amber-50/60 p-1 rounded-2xl border border-amber-200/80 text-xs font-semibold shrink-0 whitespace-nowrap">
             <button
               onClick={() => onSelectTab('candidate')}
-              className={`px-3 sm:px-4 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 sm:px-4 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                 currentTab === 'candidate'
                   ? 'bg-white text-orange-700 shadow-xs border border-amber-200/70 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-              <span>Giao diện thi</span>
+              <span className="whitespace-nowrap">Giao diện thi</span>
             </button>
 
             <button
               onClick={() => onSelectTab('btc')}
-              className={`px-3 sm:px-4 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 sm:px-4 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                 currentTab === 'btc'
                   ? 'bg-white text-orange-700 shadow-xs border border-amber-200/70 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Quản trị đề thi</span>
+              <span className="whitespace-nowrap">Quản trị đề thi</span>
             </button>
           </nav>
         )}
 
         {/* Right side: Login / Logout */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
           {isBtcLoggedIn ? (
-            <div className="flex items-center gap-2">
-              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-bold">
+            <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-bold whitespace-nowrap shrink-0">
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Ban Tổ Chức ELABS</span>
+                <span className="whitespace-nowrap">Ban Tổ Chức ELABS</span>
               </div>
 
               <button
-                onClick={() => onSelectTab('btc')}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <LayoutDashboard className="w-3.5 h-3.5 text-amber-600" />
-                <span>Trang quản trị</span>
-              </button>
-              <button
                 onClick={onBtcLogout}
-                className="px-3 py-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 title="Đăng xuất khỏi hệ thống"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Đăng xuất</span>
+                <LogOut className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">Đăng xuất</span>
               </button>
             </div>
           ) : (
